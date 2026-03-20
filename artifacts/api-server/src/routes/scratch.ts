@@ -242,28 +242,41 @@ router.get("/user/:username", async (req, res) => {
       projects = Array.isArray(p1) ? p1 : [];
     } catch (_) {}
 
-    // Get follower/following counts
+    // Get follower/following counts using ScratchDB API for accurate counts
     let followers = 0;
     let following = 0;
     try {
-      const followerCount = await fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=1`);
-      followers = Array.isArray(followerCount) ? 0 : (followerCount as any)?.total || 0;
-      if (Array.isArray(followerCount)) {
-        const allFollowers = await fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40`);
-        followers = Array.isArray(allFollowers) ? allFollowers.length : 0;
+      const scratchDbRes = await fetch(`https://scratchdb.lefty.one/v3/user/info/${username}`, {
+        headers: { "User-Agent": "ScratchAnalyzer/1.0" }
+      });
+      if (scratchDbRes.ok) {
+        const scratchDbData = await scratchDbRes.json() as any;
+        followers = scratchDbData?.statistics?.followers || 0;
+        following = scratchDbData?.statistics?.following || 0;
       }
     } catch (_) {}
 
-    try {
-      const followingCount = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40`);
-      following = Array.isArray(followingCount) ? followingCount.length : 0;
-    } catch (_) {}
+    // Fallback: count from API if ScratchDB failed
+    if (followers === 0) {
+      try {
+        // Fetch multiple pages to get a better estimate
+        const pages = await Promise.all([
+          fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=0`).catch(() => []),
+          fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=40`).catch(() => []),
+        ]);
+        const allFollowers = [...(pages[0] as any[]), ...(pages[1] as any[])];
+        followers = allFollowers.length;
+        // If we got 80, there are likely more - indicate with a +
+        if (followers >= 80) followers = 80;
+      } catch (_) {}
+    }
 
-    // Try to get exact follower count from a different endpoint
-    try {
-      const statsPage = await fetch(`https://scratchstats.com/${username}`);
-      // We won't parse this, just use what we have
-    } catch (_) {}
+    if (following === 0) {
+      try {
+        const followingList = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40`);
+        following = Array.isArray(followingList) ? followingList.length : 0;
+      } catch (_) {}
+    }
 
     // Calculate aggregate stats
     const total_projects = projects.length;

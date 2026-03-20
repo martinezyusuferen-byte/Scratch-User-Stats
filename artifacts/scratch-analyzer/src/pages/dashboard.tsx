@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { 
   Search, ArrowLeft, Heart, Eye, Star, MessageSquare, Repeat, 
-  Calendar, CheckCircle, XCircle, TrendingUp, Award, Zap
+  Calendar, CheckCircle, XCircle, TrendingUp, Award, Zap, Activity
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { CircularProgress } from "@/components/ui/circular-progress";
