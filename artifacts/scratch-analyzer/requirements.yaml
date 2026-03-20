@@ -1,0 +1,11 @@
+packages:
+  "framer-motion": "For beautiful page transitions and staggered reveals"
+  "recharts": "For the activity bar chart data visualization"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility for merging tailwind classes safely"
+images:
+  - path: "artifacts/scratch-analyzer/public/images/hero-bg.png"
+    description: "Abstract glassmorphism background with vibrant neon orange and deep purple gradients, glowing geometric shapes, futuristic analytics feeling, dark mode"
+    aspect_ratio: "16:9"
+notes:
+  - "React Query hooks are imported from @workspace/api-client-react"
