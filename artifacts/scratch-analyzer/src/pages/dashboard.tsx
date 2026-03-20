@@ -4,13 +4,15 @@ import { motion } from "framer-motion";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
   ResponsiveContainer, Cell, RadarChart, PolarGrid,
-  PolarAngleAxis, Radar,
+  PolarAngleAxis, Radar, PieChart, Pie, Legend,
 } from "recharts";
 import {
   Search, Heart, Eye, Star, MessageSquare, Repeat,
   Calendar, CheckCircle, XCircle, TrendingUp, Award,
-  Zap, Users, ArrowUpRight, Download, Share2,
-  Activity, Target, Shield, Clock, Flame,
+  Zap, Users, ArrowUpRight, Share2,
+  Activity, Target, Shield, Clock, Flame, Cpu,
+  BarChart2, Sparkles, Dna, Filter, Gauge,
+  BrainCircuit, Rocket, ChevronUp, ChevronDown, Minus,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { CircularProgress } from "@/components/ui/circular-progress";
@@ -123,6 +125,7 @@ export default function Dashboard() {
   const s = analiz.stats;
   const sc = analiz.score;
   const adv = analiz.advanced;
+  const sup = (analiz as any).superlative || {};
 
   const radarVerisi = [
     { konu: "Etkileşim", deger: sc.etkilesim },
@@ -693,6 +696,368 @@ export default function Dashboard() {
               </div>
             </GlassCard>
           </motion.div>
+
+          {/* ══════════════════════════════════════════════════════
+               12 SÜPER ÖZELLİK — Scratch'in yapamadığı analizler
+          ══════════════════════════════════════════════════════ */}
+          {sup && Object.keys(sup).length > 0 && (
+            <motion.div variants={item}>
+              <h2 className="font-display font-bold text-lg sm:text-xl mb-4 flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-yellow-400" /> Derinlemesine Analiz
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                {/* 1 — VİRAL POTANSİYEL MOTORU */}
+                {sup.viral_potansiyel && (
+                  <GlassCard className="p-5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-orange-500/10 to-transparent rounded-bl-full" />
+                    <h4 className="font-semibold text-sm mb-4 flex items-center gap-1.5">
+                      <Rocket className="w-4 h-4 text-orange-400" /> Viral Potansiyel Motoru
+                    </h4>
+                    <div className="flex items-center gap-4">
+                      <div className="relative w-20 h-20 shrink-0">
+                        <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3" />
+                          <circle cx="18" cy="18" r="15" fill="none"
+                            stroke={sup.viral_potansiyel.skor >= 75 ? "#f97316" : sup.viral_potansiyel.skor >= 55 ? "#eab308" : sup.viral_potansiyel.skor >= 35 ? "#6366f1" : "#6b7280"}
+                            strokeWidth="3" strokeDasharray={`${sup.viral_potansiyel.skor * 0.942} 94.2`} strokeLinecap="round" />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-base font-bold">{sup.viral_potansiyel.skor}</span>
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-bold text-orange-400 text-sm mb-1">{sup.viral_potansiyel.seviye}</div>
+                        {(sup.viral_potansiyel.faktorler || []).slice(0, 3).map((f: string, i: number) => (
+                          <div key={i} className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <div className="w-1 h-1 rounded-full bg-orange-400/60 shrink-0" /> {f}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-3 bg-white/5 rounded-lg p-2">
+                      Beğeni hızı × Remix çarpanı × Etkileşim zinciri faktörleriyle hesaplandı
+                    </p>
+                  </GlassCard>
+                )}
+
+                {/* 2 — KELIME DNA'SI */}
+                {sup.kelime_dna && sup.kelime_dna.length > 0 && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Dna className="w-4 h-4 text-purple-400" /> İçerik Kelime DNA'sı
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">Proje başlıklarında en çok geçen kelimeler</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sup.kelime_dna.map((k: { kelime: string; sayi: number }, i: number) => {
+                        const boyut = i === 0 ? "text-base font-black" : i < 3 ? "text-sm font-bold" : i < 6 ? "text-xs font-semibold" : "text-[10px]";
+                        const opasite = i === 0 ? "bg-purple-500/30 text-purple-300" : i < 3 ? "bg-purple-500/20 text-purple-400" : "bg-white/5 text-white/60";
+                        return (
+                          <span key={i} className={cn("px-2 py-1 rounded-full border border-white/10", boyut, opasite)}>
+                            {k.kelime} <span className="opacity-60 text-[9px]">×{k.sayi}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {/* 3 — İÇERİK KATEGORİ DAĞILIMI */}
+                {sup.icerik_dagilimi && sup.icerik_dagilimi.length > 0 && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-1.5">
+                      <Filter className="w-4 h-4 text-cyan-400" /> İçerik Kategori Dağılımı
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-2">
+                      Dominant Tür: <strong className="text-white">{sup.dominant_tur}</strong>
+                    </p>
+                    <div className="space-y-2">
+                      {sup.icerik_dagilimi.map((k: { kategori: string; sayi: number; oran: number }, i: number) => {
+                        const renkler = ["bg-cyan-500","bg-violet-500","bg-pink-500","bg-amber-500","bg-teal-500","bg-slate-500"];
+                        return (
+                          <div key={i}>
+                            <div className="flex justify-between text-[10px] mb-0.5">
+                              <span className="text-muted-foreground">{k.kategori}</span>
+                              <span className="font-bold">{k.sayi} proje (%{k.oran})</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/5">
+                              <motion.div initial={{ width: 0 }} animate={{ width: `${k.oran}%` }}
+                                transition={{ duration: 0.8, delay: i * 0.1 }}
+                                className={cn("h-full rounded-full", renkler[i % renkler.length])} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </GlassCard>
+                )}
+
+                {/* 4 — ETKİLEŞİM ŞELALE HUNİSİ */}
+                {sup.etkilesim_hunisi && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Gauge className="w-4 h-4 text-green-400" /> Etkileşim Şelale Hunisi
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">Her aşamada kaç kişi devam ediyor?</p>
+                    {[
+                      { etiket: "👁 Görüntüleme", sayi: sup.etkilesim_hunisi.goruntulemeler, oran: 100, renk: "bg-blue-500" },
+                      { etiket: "❤ Beğeni", sayi: sup.etkilesim_hunisi.begeniler, oran: sup.etkilesim_hunisi.begeni_orani, renk: "bg-pink-500" },
+                      { etiket: "⭐ Favori", sayi: sup.etkilesim_hunisi.favoriler, oran: sup.etkilesim_hunisi.favori_orani, renk: "bg-yellow-500" },
+                      { etiket: "🔁 Remix", sayi: sup.etkilesim_hunisi.remixler, oran: sup.etkilesim_hunisi.remix_orani, renk: "bg-teal-500" },
+                      { etiket: "💬 Yorum", sayi: sup.etkilesim_hunisi.yorumlar, oran: sup.etkilesim_hunisi.yorum_orani, renk: "bg-orange-500" },
+                    ].map((h, i) => (
+                      <div key={i} className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[10px] text-muted-foreground w-20 shrink-0">{h.etiket}</span>
+                        <div className="flex-1 h-4 bg-white/5 rounded-full overflow-hidden relative">
+                          <motion.div initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, h.oran)}%` }}
+                            transition={{ duration: 0.8, delay: i * 0.1 }}
+                            className={cn("h-full rounded-full", h.renk)} />
+                        </div>
+                        <span className="text-[10px] font-bold w-10 text-right">{h.oran?.toFixed ? h.oran.toFixed(1) : h.oran}%</span>
+                      </div>
+                    ))}
+                  </GlassCard>
+                )}
+
+                {/* 5 — PROJE TİER SİSTEMİ */}
+                {sup.proje_tierleri && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-yellow-400" /> Proje Tier Sınıflaması
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">S (efsane) → D (düşük) sistemi</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {sup.proje_tierleri.filter((t: any) => t.sayi > 0).map((t: any) => (
+                        <div key={t.tier} className="flex flex-col items-center gap-1 flex-1 min-w-[40px]">
+                          <div className="text-xs font-black px-3 py-1 rounded-lg border"
+                            style={{ color: t.renk, borderColor: t.renk + "50", backgroundColor: t.renk + "15" }}>
+                            {t.tier}
+                          </div>
+                          <span className="text-base font-bold">{t.sayi}</span>
+                          <span className="text-[10px] text-muted-foreground">%{t.oran}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-3 bg-white/5 rounded-lg p-2">
+                      Görüntüleme × Beğeni/görüntüleme oranına göre hesaplandı
+                    </p>
+                  </GlassCard>
+                )}
+
+                {/* 6 — BÜYÜME HIZI + 12 AYLIK PROJEKSİYON */}
+                {sup.buyume_projeksiyonu && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-1 flex items-center gap-1.5">
+                      <TrendingUp className="w-4 h-4 text-emerald-400" /> Büyüme Projeksiyonu
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">
+                      Büyüme Hızı: <strong className="text-white">{sup.buyume_hizi_etiketi}</strong>
+                    </p>
+                    <div className="space-y-2">
+                      {sup.buyume_projeksiyonu.map((p: { ay: string; tahmini_takipci: number }, i: number) => (
+                        <div key={i} className="flex justify-between items-center bg-white/5 rounded-lg px-3 py-2">
+                          <span className="text-xs text-muted-foreground">{p.ay} sonra</span>
+                          <span className="font-bold text-emerald-400 text-sm">
+                            ~{p.tahmini_takipci.toLocaleString("tr-TR")} takipçi
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      Mevcut etkileşim oranına göre ileriye dönük tahmin
+                    </p>
+                  </GlassCard>
+                )}
+
+                {/* 7 — BAŞARI DNA'SI */}
+                {sup.basari_dna && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <BrainCircuit className="w-4 h-4 text-pink-400" /> Başarı DNA'sı
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">En iyi 5 projenin ortak özellikleri</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Ort. Başlık Uzunluğu</span>
+                        <span className="font-bold">{sup.basari_dna.ortalama_baslik_uzunlugu} karakter</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Ort. Açıklama Uzunluğu</span>
+                        <span className="font-bold">{sup.basari_dna.ortalama_aciklama_uzunlugu} karakter</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Açıklama Olan Proje</span>
+                        <span className="font-bold text-green-400">%{sup.basari_dna.aciklama_olan_oran}</span>
+                      </div>
+                    </div>
+                    <div className="mt-3 bg-pink-500/10 border border-pink-500/20 rounded-lg p-2.5">
+                      <div className="text-[10px] font-bold text-pink-400 mb-1">🔑 Başarı Formülü</div>
+                      <div className="text-xs text-white/80">{sup.basari_dna.basari_formulu}</div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">💡 {sup.basari_dna.ipucu}</p>
+                  </GlassCard>
+                )}
+
+                {/* 8 — HAYRAN GÜÇ ENDEKSİ */}
+                {sup.hayran_guc_endeksi && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-rose-400" /> Hayran Güç Endeksi
+                    </h4>
+                    <div className="flex items-center gap-4">
+                      <div className="text-4xl font-display font-black text-rose-400">
+                        %{sup.hayran_guc_endeksi.oran}
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm">{sup.hayran_guc_endeksi.seviye}</div>
+                        <div className="text-[10px] text-muted-foreground">Favori/Beğeni Oranı</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 rounded-full bg-white/5">
+                      <motion.div initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, sup.hayran_guc_endeksi.oran)}%` }}
+                        transition={{ duration: 1.2 }}
+                        className="h-full rounded-full bg-gradient-to-r from-rose-600 to-pink-400" />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
+                      {sup.hayran_guc_endeksi.aciklama}
+                    </p>
+                  </GlassCard>
+                )}
+
+                {/* 9 — SCRATCH ALGORİTMA UYUMU */}
+                {sup.algoritma_uyumu && (
+                  <GlassCard className="p-5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl" />
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Cpu className="w-4 h-4 text-indigo-400" /> Scratch Algoritma Uyumu
+                    </h4>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="text-3xl font-display font-black text-indigo-400">
+                        {sup.algoritma_uyumu.skor}/100
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-xs font-bold">{sup.algoritma_uyumu.durum}</div>
+                        <div className="h-1.5 rounded-full bg-white/5 mt-1">
+                          <motion.div initial={{ width: 0 }}
+                            animate={{ width: `${sup.algoritma_uyumu.skor}%` }}
+                            transition={{ duration: 1 }}
+                            className="h-full rounded-full bg-indigo-500" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-2.5">
+                      <div className="text-[10px] font-bold text-indigo-400 mb-1">🎯 İyileştirme</div>
+                      <div className="text-xs">{sup.algoritma_uyumu.iyilestirme}</div>
+                    </div>
+                  </GlassCard>
+                )}
+
+                {/* 10 — PROJE MOMENTUM */}
+                {sup.proje_momentum && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Activity className="w-4 h-4 text-amber-400" /> Proje Momentum Analizi
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">
+                      Son projeler vs. eski projeler performans farkı
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div className="bg-white/5 rounded-lg p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Yeni Proje Ort.</div>
+                        <div className="text-sm font-bold text-amber-400">{sup.proje_momentum.yeni_proje_ort_begeni} ❤</div>
+                      </div>
+                      <div className="bg-white/5 rounded-lg p-2 text-center">
+                        <div className="text-[10px] text-muted-foreground">Eski Proje Ort.</div>
+                        <div className="text-sm font-bold">{sup.proje_momentum.eski_proje_ort_begeni} ❤</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {sup.proje_momentum.degisim_yuzdesi > 0
+                        ? <ChevronUp className="w-4 h-4 text-green-400" />
+                        : sup.proje_momentum.degisim_yuzdesi < 0
+                        ? <ChevronDown className="w-4 h-4 text-red-400" />
+                        : <Minus className="w-4 h-4 text-gray-400" />}
+                      <span className={cn("font-bold text-sm",
+                        sup.proje_momentum.degisim_yuzdesi > 0 ? "text-green-400" :
+                        sup.proje_momentum.degisim_yuzdesi < 0 ? "text-red-400" : "text-gray-400")}>
+                        %{Math.abs(sup.proje_momentum.degisim_yuzdesi)} fark
+                      </span>
+                      <span className="text-xs text-muted-foreground">{sup.proje_momentum.yorum}</span>
+                    </div>
+                  </GlassCard>
+                )}
+
+                {/* 11 — TOPLULUK KONUMLANDIRMASI */}
+                {sup.topluluk_konumlama && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <Target className="w-4 h-4 text-teal-400" /> Topluluk Konumlandırması
+                    </h4>
+                    <div className="text-center mb-3">
+                      <div className="inline-block px-4 py-1.5 rounded-full bg-teal-500/20 border border-teal-500/30 text-teal-300 font-bold text-sm">
+                        {sup.topluluk_konumlama.yuzdelik_dilim}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {[
+                        { etiket: "Proje sayısı", kiyasi: sup.topluluk_konumlama.proje_kiyasi },
+                        { etiket: "Görüntüleme", kiyasi: sup.topluluk_konumlama.goruntuleme_kiyasi },
+                        { etiket: "Beğeni", kiyasi: sup.topluluk_konumlama.begeni_kiyasi },
+                      ].map((k, i) => (
+                        <div key={i} className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">{k.etiket}</span>
+                          <span className={cn("font-bold", (k.kiyasi || 0) >= 2 ? "text-green-400" : "text-white")}>
+                            Ort. × {k.kiyasi}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-3 bg-white/5 rounded-lg p-2">
+                      {sup.topluluk_konumlama.ozet}
+                    </p>
+                  </GlassCard>
+                )}
+
+                {/* 12 — BAŞLIK OPTİMİZASYON SKORU */}
+                {sup.baslik_optimizasyon && (
+                  <GlassCard className="p-5">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-1.5">
+                      <BarChart2 className="w-4 h-4 text-lime-400" /> Başlık Optimizasyon Skoru
+                    </h4>
+                    <p className="text-[10px] text-muted-foreground mb-3">
+                      Proje başlıklarının keşfedilebilirlik analizi
+                    </p>
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="text-4xl font-display font-black text-lime-400">
+                        {sup.baslik_optimizasyon.skor}
+                      </div>
+                      <div>
+                        <div className={cn("text-sm font-bold",
+                          sup.baslik_optimizasyon.seviye === "Mükemmel" ? "text-green-400" :
+                          sup.baslik_optimizasyon.seviye === "İyi" ? "text-lime-400" :
+                          sup.baslik_optimizasyon.seviye === "Orta" ? "text-yellow-400" : "text-red-400")}>
+                          {sup.baslik_optimizasyon.seviye}
+                        </div>
+                        <div className="h-1.5 rounded-full bg-white/5 mt-1 w-24">
+                          <motion.div initial={{ width: 0 }}
+                            animate={{ width: `${sup.baslik_optimizasyon.skor}%` }}
+                            transition={{ duration: 1 }}
+                            className="h-full rounded-full bg-lime-500" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-lime-500/10 border border-lime-500/20 rounded-lg p-2.5">
+                      <div className="text-[10px] font-bold text-lime-400 mb-1">💡 Tavsiye</div>
+                      <div className="text-xs">{sup.baslik_optimizasyon.ipucu}</div>
+                    </div>
+                  </GlassCard>
+                )}
+
+              </div>
+            </motion.div>
+          )}
 
           {/* ── GÜÇLÜ / GELİŞTİRİLECEK ── */}
           <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
