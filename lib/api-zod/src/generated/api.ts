@@ -16,7 +16,6 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Fetches and analyzes a Scratch user profile with statistics and insights
  * @summary Get Scratch user analysis
  */
 export const GetScratchUserParams = zod.object({
@@ -51,33 +50,49 @@ export const GetScratchUserResponse = zod.object({
     remix_rate: zod.number(),
     days_on_scratch: zod.number(),
     projects_per_month: zod.number(),
+    batma_orani: zod
+      .number()
+      .describe("Batma Oranı: görüntüleyip sevmeyen kullanıcı yüzdesi"),
+    etkilesim_orani: zod
+      .number()
+      .describe("Etkileşim Oranı: (sevgi+favori+yorum)\/görüntüleme\*100"),
+    yorum_orani: zod.number().describe("Proje başına düşen ortalama yorum"),
+    takip_orani: zod.number().describe("Takipçi\/Takip edilen oranı"),
+    gunluk_ortalama_goruntuleme: zod
+      .number()
+      .describe("Günlük ortalama görüntülenme"),
+    verimlilik_skoru: zod
+      .number()
+      .describe("Proje başına etkileşim verimliliği"),
   }),
   insights: zod.object({
-    strengths: zod.array(zod.string()),
-    weaknesses: zod.array(zod.string()),
-    growth_tips: zod.array(
+    guclu_yonler: zod.array(zod.string()),
+    gelistirilecek_yonler: zod.array(zod.string()),
+    buyume_onerileri: zod.array(
       zod.object({
-        category: zod.string(),
-        tip: zod.string(),
-        priority: zod.enum(["high", "medium", "low"]),
-        impact: zod.string(),
+        kategori: zod.string(),
+        oneri: zod.string(),
+        oncelik: zod.enum(["yuksek", "orta", "dusuk"]),
+        etki: zod.string(),
       }),
     ),
-    creator_type: zod.string(),
-    activity_level: zod.string(),
-    engagement_quality: zod.string(),
-    best_performing_category: zod.string().optional(),
+    icerik_turu: zod.string(),
+    aktivite_seviyesi: zod.string(),
+    etkilesim_kalitesi: zod.string(),
+    buyume_trendi: zod.string().describe("Yükselen \/ Sabit \/ Düşen"),
+    en_iyi_paylasim_zamani: zod.string(),
+    icerik_tutarliligi: zod.string(),
   }),
   score: zod.object({
-    overall: zod.number(),
-    engagement: zod.number(),
-    creativity: zod.number(),
-    community: zod.number(),
-    consistency: zod.number(),
-    growth_potential: zod.number(),
-    rank: zod.string(),
-    rank_icon: zod.string(),
-    percentile: zod.number(),
+    genel: zod.number(),
+    etkilesim: zod.number(),
+    yaraticilik: zod.number(),
+    topluluk: zod.number(),
+    tutarlilik: zod.number(),
+    buyume_potansiyeli: zod.number(),
+    rutbe: zod.string(),
+    rutbe_ikonu: zod.string(),
+    yuzdeLik: zod.number(),
   }),
   top_projects: zod.array(
     zod.object({
@@ -97,20 +112,75 @@ export const GetScratchUserResponse = zod.object({
     }),
   ),
   activity: zod.object({
-    last_project_date: zod.string().nullish(),
-    is_active: zod.boolean(),
-    activity_streak: zod.number(),
-    monthly_projects: zod.array(
+    son_proje_tarihi: zod.string().nullish(),
+    aktif_mi: zod.boolean(),
+    aktivite_serisi: zod.number(),
+    aylik_projeler: zod.array(
       zod.object({
-        month: zod.string(),
-        count: zod.number(),
+        ay: zod.string(),
+        sayi: zod.number(),
       }),
     ),
+  }),
+  advanced: zod.object({
+    en_iyi_proje: zod
+      .object({
+        id: zod.number(),
+        title: zod.string(),
+        description: zod.string().optional(),
+        thumbnail_url: zod.string().optional(),
+        loves: zod.number(),
+        favorites: zod.number(),
+        views: zod.number(),
+        remixes: zod.number(),
+        created: zod.string(),
+        modified: zod.string(),
+        share_date: zod.string().optional(),
+        comments_allowed: zod.boolean().optional(),
+        url: zod.string(),
+      })
+      .nullish(),
+    en_cok_izlenen: zod
+      .object({
+        id: zod.number(),
+        title: zod.string(),
+        description: zod.string().optional(),
+        thumbnail_url: zod.string().optional(),
+        loves: zod.number(),
+        favorites: zod.number(),
+        views: zod.number(),
+        remixes: zod.number(),
+        created: zod.string(),
+        modified: zod.string(),
+        share_date: zod.string().optional(),
+        comments_allowed: zod.boolean().optional(),
+        url: zod.string(),
+      })
+      .nullish(),
+    remix_edilme_orani: zod
+      .number()
+      .describe("1000 görüntülemede kaç kez remix edildi"),
+    topluluk_etkisi: zod.string().describe("Topluluk üzerindeki etki seviyesi"),
+    hesap_yaslanma_hizi: zod
+      .string()
+      .describe("Proje üretme hızına göre hesap olgunluğu"),
+    tahmini_aylik_buyume: zod
+      .number()
+      .describe("Tahmini aylık takipçi büyüme yüzdesi"),
+    karsilastirma_skoru: zod.string().describe("Benzer kullanıcılarla kıyasla"),
+    onerilen_tur: zod
+      .string()
+      .describe("Daha iyi performans için önerilen proje türü"),
+    zayif_proje_orani: zod
+      .number()
+      .describe("100'den az görüntüleme alan proje yüzdesi"),
+    guclu_proje_orani: zod
+      .number()
+      .describe("1000+ görüntüleme alan proje yüzdesi"),
   }),
 });
 
 /**
- * Returns all public projects with detailed statistics for a Scratch user
  * @summary Get user projects with stats
  */
 export const GetScratchUserProjectsParams = zod.object({

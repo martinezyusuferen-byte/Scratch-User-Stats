@@ -5,11 +5,11 @@
  * Scratch Analyzer API
  * OpenAPI spec version: 0.1.0
  */
-import type { GrowthTipPriority } from "./growthTipPriority";
+import type { GrowthTipOncelik } from "./growthTipOncelik";
 
 export interface GrowthTip {
-  category: string;
-  tip: string;
-  priority: GrowthTipPriority;
-  impact: string;
+  kategori: string;
+  oneri: string;
+  oncelik: GrowthTipOncelik;
+  etki: string;
 }

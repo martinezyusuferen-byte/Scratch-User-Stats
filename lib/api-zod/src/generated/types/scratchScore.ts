@@ -7,13 +7,13 @@
  */
 
 export interface ScratchScore {
-  overall: number;
-  engagement: number;
-  creativity: number;
-  community: number;
-  consistency: number;
-  growth_potential: number;
-  rank: string;
-  rank_icon: string;
-  percentile: number;
+  genel: number;
+  etkilesim: number;
+  yaraticilik: number;
+  topluluk: number;
+  tutarlilik: number;
+  buyume_potansiyeli: number;
+  rutbe: string;
+  rutbe_ikonu: string;
+  yuzdeLik: number;
 }

@@ -7,10 +7,7 @@ const SCRATCH_CDN = "https://cdn2.scratch.mit.edu";
 
 async function fetchScratch(url: string) {
   const res = await fetch(url, {
-    headers: {
-      "User-Agent": "ScratchAnalyzer/1.0",
-      "Accept": "application/json",
-    },
+    headers: { "User-Agent": "ScratchAnalyzer/1.0", "Accept": "application/json" },
   });
   if (!res.ok) {
     const err = new Error(`Scratch API error: ${res.status}`);
@@ -20,300 +17,318 @@ async function fetchScratch(url: string) {
   return res.json();
 }
 
-function calculateScore(stats: any, profile: any, projects: any[]) {
+function hesaplaRutbe(skor: number) {
+  if (skor >= 90) return { rutbe: "Efsane", rutbe_ikonu: "🏆" };
+  if (skor >= 78) return { rutbe: "Yıldız Yapımcı", rutbe_ikonu: "⭐" };
+  if (skor >= 62) return { rutbe: "Yükselen Yıldız", rutbe_ikonu: "🚀" };
+  if (skor >= 46) return { rutbe: "Aktif Yapımcı", rutbe_ikonu: "🎨" };
+  if (skor >= 30) return { rutbe: "Kaşif", rutbe_ikonu: "🔍" };
+  return { rutbe: "Başlangıç", rutbe_ikonu: "🌱" };
+}
+
+function hesaplaSkor(istatistikler: any) {
   const {
-    followers,
-    following,
-    total_projects,
-    total_loves,
-    total_views,
-    total_favorites,
-    total_remixes,
-    average_loves_per_project,
-    average_views_per_project,
-    love_to_view_ratio,
-    projects_per_month,
-  } = stats;
+    followers, total_projects, total_loves, total_views,
+    love_to_view_ratio, projects_per_month, batma_orani,
+    etkilesim_orani, verimlilik_skoru,
+  } = istatistikler;
 
-  // Engagement score (0-100)
-  let engagement = 0;
-  if (average_loves_per_project > 0) engagement += Math.min(40, (average_loves_per_project / 50) * 40);
-  if (love_to_view_ratio > 0) engagement += Math.min(30, love_to_view_ratio * 3000);
-  if (average_views_per_project > 0) engagement += Math.min(30, (average_views_per_project / 200) * 30);
-  engagement = Math.round(Math.min(100, engagement));
+  let etkilesim = 0;
+  if (love_to_view_ratio > 0) etkilesim += Math.min(35, love_to_view_ratio * 3500);
+  if (etkilesim_orani > 0) etkilesim += Math.min(35, etkilesim_orani * 2);
+  if (batma_orani < 90) etkilesim += Math.min(30, (90 - batma_orani) / 3);
+  etkilesim = Math.round(Math.min(100, etkilesim));
 
-  // Community score (0-100)
-  let community = 0;
-  if (followers > 0) community += Math.min(50, Math.log10(followers + 1) * 20);
-  const followRatio = following > 0 ? followers / following : followers;
-  community += Math.min(30, followRatio * 5);
-  if (total_remixes > 0) community += Math.min(20, (total_remixes / total_projects) * 20);
-  community = Math.round(Math.min(100, community));
+  let topluluk = 0;
+  if (followers > 0) topluluk += Math.min(55, Math.log10(followers + 1) * 22);
+  topluluk += Math.min(25, (istatistikler.takip_orani || 1) * 5);
+  if (istatistikler.total_remixes > 0)
+    topluluk += Math.min(20, (istatistikler.total_remixes / total_projects) * 20);
+  topluluk = Math.round(Math.min(100, topluluk));
 
-  // Creativity score (0-100)
-  let creativity = 0;
-  if (total_projects > 0) creativity += Math.min(40, Math.log10(total_projects + 1) * 20);
-  if (projects_per_month > 0) creativity += Math.min(30, projects_per_month * 10);
-  const projectVariety = projects.length > 0 ? 
-    new Set(projects.map((p: any) => p.description?.substring(0, 20) || "")).size / projects.length : 0;
-  creativity += Math.min(30, projectVariety * 30);
-  creativity = Math.round(Math.min(100, creativity));
+  let yaraticilik = 0;
+  if (total_projects > 0) yaraticilik += Math.min(40, Math.log10(total_projects + 1) * 22);
+  if (projects_per_month > 0) yaraticilik += Math.min(30, projects_per_month * 12);
+  yaraticilik += Math.min(30, verimlilik_skoru);
+  yaraticilik = Math.round(Math.min(100, yaraticilik));
 
-  // Consistency score (0-100)
-  let consistency = 0;
-  if (projects_per_month >= 1) consistency += 40;
-  else consistency += projects_per_month * 40;
-  if (stats.days_on_scratch > 0) {
-    const avgActivity = total_projects / (stats.days_on_scratch / 30);
-    consistency += Math.min(40, avgActivity * 20);
+  let tutarlilik = 0;
+  if (projects_per_month >= 1) tutarlilik += 40;
+  else tutarlilik += projects_per_month * 40;
+  if (istatistikler.days_on_scratch > 0) {
+    const ort = total_projects / (istatistikler.days_on_scratch / 30);
+    tutarlilik += Math.min(40, ort * 22);
   }
-  if (stats.is_active) consistency += 20;
-  consistency = Math.round(Math.min(100, consistency));
+  if (istatistikler.aktif_mi) tutarlilik += 20;
+  tutarlilik = Math.round(Math.min(100, tutarlilik));
 
-  // Growth potential (0-100)
-  let growth_potential = 0;
-  if (followers < 1000) growth_potential += 40;
-  else if (followers < 10000) growth_potential += 20;
-  if (love_to_view_ratio > 0.05) growth_potential += 30;
-  if (projects_per_month > 0.5) growth_potential += 30;
-  growth_potential = Math.round(Math.min(100, growth_potential));
+  let buyume_potansiyeli = 0;
+  if (followers < 500) buyume_potansiyeli += 45;
+  else if (followers < 5000) buyume_potansiyeli += 25;
+  else buyume_potansiyeli += 10;
+  if (etkilesim_orani > 5) buyume_potansiyeli += 30;
+  if (projects_per_month > 0.5) buyume_potansiyeli += 25;
+  buyume_potansiyeli = Math.round(Math.min(100, buyume_potansiyeli));
 
-  const overall = Math.round(
-    (engagement * 0.3 + community * 0.25 + creativity * 0.2 + consistency * 0.15 + growth_potential * 0.1)
+  const genel = Math.round(
+    etkilesim * 0.30 + topluluk * 0.25 + yaraticilik * 0.20 +
+    tutarlilik * 0.15 + buyume_potansiyeli * 0.10
   );
 
-  let rank = "Beginner";
-  let rank_icon = "🌱";
-  if (overall >= 90) { rank = "Legend"; rank_icon = "🏆"; }
-  else if (overall >= 75) { rank = "Star Creator"; rank_icon = "⭐"; }
-  else if (overall >= 60) { rank = "Rising Star"; rank_icon = "🚀"; }
-  else if (overall >= 45) { rank = "Active Maker"; rank_icon = "🎨"; }
-  else if (overall >= 30) { rank = "Explorer"; rank_icon = "🔍"; }
-  else { rank = "Beginner"; rank_icon = "🌱"; }
+  const { rutbe, rutbe_ikonu } = hesaplaRutbe(genel);
 
-  const percentile = Math.min(99, overall);
-
-  return { overall, engagement, creativity, community, consistency, growth_potential, rank, rank_icon, percentile };
+  return { genel, etkilesim, yaraticilik, topluluk, tutarlilik, buyume_potansiyeli, rutbe, rutbe_ikonu, yuzdeLik: Math.min(99, genel) };
 }
 
-function generateInsights(stats: any, score: any, projects: any[]) {
-  const strengths: string[] = [];
-  const weaknesses: string[] = [];
-  const growth_tips: any[] = [];
+function uretIcegorular(istatistikler: any, skor: any, projeler: any[]) {
+  const guclu_yonler: string[] = [];
+  const gelistirilecek_yonler: string[] = [];
+  const buyume_onerileri: any[] = [];
 
-  // Strengths
-  if (stats.followers > 100) strengths.push(`${stats.followers.toLocaleString()} loyal followers`);
-  if (stats.average_loves_per_project > 20) strengths.push("High engagement per project");
-  if (stats.love_to_view_ratio > 0.05) strengths.push("Excellent love-to-view ratio");
-  if (stats.total_projects > 10) strengths.push(`Prolific creator with ${stats.total_projects} projects`);
-  if (stats.projects_per_month >= 2) strengths.push("Consistent publishing schedule");
-  if (stats.total_remixes > 0) strengths.push("Active in the remix community");
-  if (score.engagement > 60) strengths.push("Strong audience engagement");
-  if (stats.total_views > 10000) strengths.push(`Impressive reach with ${stats.total_views.toLocaleString()} total views`);
+  if (istatistikler.followers > 100)
+    guclu_yonler.push(`${istatistikler.followers.toLocaleString('tr-TR')} sadık takipçi`);
+  if (istatistikler.average_loves_per_project > 20)
+    guclu_yonler.push("Proje başına yüksek beğeni");
+  if (istatistikler.etkilesim_orani > 5)
+    guclu_yonler.push("Mükemmel etkileşim oranı");
+  if (istatistikler.total_projects > 10)
+    guclu_yonler.push(`${istatistikler.total_projects} proje ile üretken yapımcı`);
+  if (istatistikler.projects_per_month >= 2)
+    guclu_yonler.push("Düzenli yayın programı");
+  if (istatistikler.total_remixes > 0)
+    guclu_yonler.push("Remix topluluğunda aktif");
+  if (istatistikler.total_views > 10000)
+    guclu_yonler.push(`${istatistikler.total_views.toLocaleString('tr-TR')} görüntüleme ile geniş kitle`);
+  if (istatistikler.batma_orani < 85)
+    guclu_yonler.push("Düşük batma oranı — içerik kaliteli");
 
-  // Weaknesses
-  if (stats.followers < 50) weaknesses.push("Low follower count");
-  if (stats.average_loves_per_project < 5) weaknesses.push("Projects need more engagement");
-  if (stats.love_to_view_ratio < 0.02) weaknesses.push("Low love-to-view conversion rate");
-  if (stats.projects_per_month < 0.5) weaknesses.push("Infrequent publishing schedule");
-  if (stats.total_projects < 5) weaknesses.push("Limited project portfolio");
-  if (!stats.is_active) weaknesses.push("Account appears inactive");
+  if (istatistikler.followers < 50)
+    gelistirilecek_yonler.push("Takipçi sayısı düşük");
+  if (istatistikler.average_loves_per_project < 5)
+    gelistirilecek_yonler.push("Projeler daha fazla etkileşim kazanabilir");
+  if (istatistikler.batma_orani > 92)
+    gelistirilecek_yonler.push("Batma oranı çok yüksek — içerik beklentiyi karşılamıyor");
+  if (istatistikler.projects_per_month < 0.5)
+    gelistirilecek_yonler.push("Çok seyrek yayın yapılıyor");
+  if (istatistikler.total_projects < 5)
+    gelistirilecek_yonler.push("Proje portföyü yetersiz");
+  if (!istatistikler.aktif_mi)
+    gelistirilecek_yonler.push("Hesap görünürde aktif değil");
 
-  if (weaknesses.length === 0) weaknesses.push("Keep up the amazing work!");
+  if (gelistirilecek_yonler.length === 0)
+    gelistirilecek_yonler.push("Harika çalışmaya devam et!");
 
-  // Growth tips
-  if (stats.followers < 1000) {
-    growth_tips.push({
-      category: "Community",
-      tip: "Follow and engage with popular Scrapers in your niche. Comment on their projects and join studios.",
-      priority: "high",
-      impact: "Can increase followers by 20-50% in a month"
+  if (istatistikler.followers < 1000) {
+    buyume_onerileri.push({
+      kategori: "Topluluk",
+      oneri: "Kendi türündeki popüler kullanıcıları takip et ve projelerine yorum bırak. Stüdyolara katıl.",
+      oncelik: "yuksek",
+      etki: "Ayda %20–50 takipçi artışı sağlayabilir"
     });
   }
-
-  if (stats.projects_per_month < 1) {
-    growth_tips.push({
-      category: "Consistency",
-      tip: "Try to publish at least 1-2 projects per month. Even short, simple projects keep your audience engaged.",
-      priority: "high",
-      impact: "Regular posting boosts follower retention by 40%"
+  if (istatistikler.projects_per_month < 1) {
+    buyume_onerileri.push({
+      kategori: "Tutarlılık",
+      oneri: "Ayda en az 1–2 proje paylaş. Kısa projeler bile takipçi bağlılığını artırır.",
+      oncelik: "yuksek",
+      etki: "Düzenli paylaşım takipçi tutmayı %40 iyileştirir"
     });
   }
-
-  if (stats.love_to_view_ratio < 0.05) {
-    growth_tips.push({
-      category: "Quality",
-      tip: "Focus on making your project thumbnails eye-catching. A good thumbnail can triple your click-through rate.",
-      priority: "high",
-      impact: "Better thumbnails can increase loves by 30%"
+  if (istatistikler.batma_orani > 90) {
+    buyume_onerileri.push({
+      kategori: "İçerik Kalitesi",
+      oneri: "Proje kapak resimlerini daha ilgi çekici yap. İyi bir kapak, tıklamayı üç katına çıkarabilir.",
+      oncelik: "yuksek",
+      etki: "İyi kapak resmi beğeniyi %30 artırır"
     });
   }
-
-  if (stats.total_remixes < 5) {
-    growth_tips.push({
-      category: "Community",
-      tip: "Remix popular projects and add your own unique twist. This exposes you to existing audiences.",
-      priority: "medium",
-      impact: "Remixing can bring 50-200 new profile views"
+  if (istatistikler.total_remixes < 5) {
+    buyume_onerileri.push({
+      kategori: "Topluluk",
+      oneri: "Popüler projeleri remix et ve kendi özgün dokunuşunu ekle. Böylece mevcut kitlelere ulaşırsın.",
+      oncelik: "orta",
+      etki: "Remix, 50–200 yeni profil ziyareti getirebilir"
     });
   }
-
-  growth_tips.push({
-    category: "Description",
-    tip: "Write detailed project descriptions with instructions. Users are more likely to engage with well-documented projects.",
-    priority: "medium",
-    impact: "Clear descriptions increase session time by 25%"
+  buyume_onerileri.push({
+    kategori: "Açıklama",
+    oneri: "Proje açıklamalarına ayrıntılı talimatlar yaz. İyi belgelenmiş projeler daha çok etkileşim alır.",
+    oncelik: "orta",
+    etki: "Net açıklama oturum süresini %25 artırır"
   });
-
-  growth_tips.push({
-    category: "Studios",
-    tip: "Join active Scratch studios related to your project types. Studios can expose your work to thousands of users.",
-    priority: "medium",
-    impact: "Studio membership can double project visibility"
+  buyume_onerileri.push({
+    kategori: "Stüdyolar",
+    oneri: "Proje türlerinle ilgili aktif Scratch stüdyolarına katıl. Stüdyolar binlerce kullanıcıya erişim sağlar.",
+    oncelik: "orta",
+    etki: "Stüdyo üyeliği proje görünürlüğünü ikiye katlar"
   });
-
-  if (stats.average_views_per_project < 100) {
-    growth_tips.push({
-      category: "Promotion",
-      tip: "Share your projects on Scratch forums and social media. Cross-promotion is key to growing your audience.",
-      priority: "low",
-      impact: "External promotion can add 10-30% more views"
+  if (istatistikler.average_views_per_project < 100) {
+    buyume_onerileri.push({
+      kategori: "Tanıtım",
+      oneri: "Projelerini Scratch forumlarında ve sosyal medyada paylaş. Çapraz tanıtım büyümenin anahtarı.",
+      oncelik: "dusuk",
+      etki: "Dış tanıtım görüntülenmeyi %10–30 artırabilir"
     });
   }
 
-  // Determine creator type
-  let creator_type = "General Creator";
-  if (stats.total_remixes > stats.total_projects * 0.5) creator_type = "Remix Artist";
-  else if (stats.average_loves_per_project > 50) creator_type = "Viral Creator";
-  else if (stats.projects_per_month > 3) creator_type = "Prolific Maker";
-  else if (stats.followers > 1000) creator_type = "Community Leader";
+  let icerik_turu = "Genel Yapımcı";
+  if (istatistikler.total_remixes > istatistikler.total_projects * 0.5) icerik_turu = "Remix Sanatçısı";
+  else if (istatistikler.average_loves_per_project > 50) icerik_turu = "Viral Yapımcı";
+  else if (istatistikler.projects_per_month > 3) icerik_turu = "Üretken Yapımcı";
+  else if (istatistikler.followers > 1000) icerik_turu = "Topluluk Lideri";
 
-  // Activity level
-  let activity_level = "Inactive";
-  if (stats.projects_per_month > 4) activity_level = "Very Active";
-  else if (stats.projects_per_month > 2) activity_level = "Active";
-  else if (stats.projects_per_month > 0.5) activity_level = "Moderate";
-  else if (stats.is_active) activity_level = "Occasional";
+  let aktivite_seviyesi = "Pasif";
+  if (istatistikler.projects_per_month > 4) aktivite_seviyesi = "Çok Aktif";
+  else if (istatistikler.projects_per_month > 2) aktivite_seviyesi = "Aktif";
+  else if (istatistikler.projects_per_month > 0.5) aktivite_seviyesi = "Orta";
+  else if (istatistikler.aktif_mi) aktivite_seviyesi = "Ara Sıra";
 
-  // Engagement quality
-  let engagement_quality = "Low";
-  if (score.engagement > 70) engagement_quality = "Excellent";
-  else if (score.engagement > 50) engagement_quality = "Good";
-  else if (score.engagement > 30) engagement_quality = "Fair";
+  let etkilesim_kalitesi = "Düşük";
+  if (skor.etkilesim > 70) etkilesim_kalitesi = "Mükemmel";
+  else if (skor.etkilesim > 50) etkilesim_kalitesi = "İyi";
+  else if (skor.etkilesim > 30) etkilesim_kalitesi = "Orta";
 
-  return { strengths, weaknesses, growth_tips, creator_type, activity_level, engagement_quality };
+  // Büyüme trendi: son 3 aya vs önceki 3 aya bak
+  const aylikVeriler = istatistikler.aylik_veriler || [];
+  let buyume_trendi = "Sabit";
+  if (aylikVeriler.length >= 6) {
+    const son3 = aylikVeriler.slice(-3).reduce((s: number, a: any) => s + a.sayi, 0);
+    const once3 = aylikVeriler.slice(-6, -3).reduce((s: number, a: any) => s + a.sayi, 0);
+    if (son3 > once3 * 1.2) buyume_trendi = "📈 Yükselen";
+    else if (son3 < once3 * 0.8) buyume_trendi = "📉 Düşen";
+    else buyume_trendi = "➡️ Sabit";
+  }
+
+  const en_iyi_paylasim_zamani = "Cuma–Cumartesi akşamı (17:00–21:00)";
+  
+  let icerik_tutarliligi = "Düşük";
+  if (istatistikler.projects_per_month >= 3) icerik_tutarliligi = "Çok Yüksek";
+  else if (istatistikler.projects_per_month >= 1.5) icerik_tutarliligi = "Yüksek";
+  else if (istatistikler.projects_per_month >= 0.5) icerik_tutarliligi = "Orta";
+
+  return {
+    guclu_yonler, gelistirilecek_yonler, buyume_onerileri,
+    icerik_turu, aktivite_seviyesi, etkilesim_kalitesi,
+    buyume_trendi, en_iyi_paylasim_zamani, icerik_tutarliligi,
+  };
 }
 
-function getMonthlyActivity(projects: any[]) {
-  const monthMap: Record<string, number> = {};
+function getAylikAktivite(projeler: any[]) {
+  const ayMap: Record<string, number> = {};
   const now = new Date();
-
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = d.toISOString().substring(0, 7);
-    monthMap[key] = 0;
+    ayMap[key] = 0;
   }
-
-  for (const p of projects) {
-    const shareDate = p.history?.shared || p.share_date;
-    if (shareDate) {
-      const key = shareDate.substring(0, 7);
-      if (key in monthMap) monthMap[key]++;
+  for (const p of projeler) {
+    const tarih = p.history?.shared || p.share_date;
+    if (tarih) {
+      const key = tarih.substring(0, 7);
+      if (key in ayMap) ayMap[key]++;
     }
   }
-
-  return Object.entries(monthMap).map(([month, count]) => ({ month, count }));
+  return Object.entries(ayMap).map(([ay, sayi]) => ({ ay, sayi }));
 }
 
 router.get("/user/:username", async (req, res) => {
   const { username } = req.params;
 
   try {
-    const [profileData, followersData, followingData] = await Promise.all([
-      fetchScratch(`${SCRATCH_API}/users/${username}`),
-      fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=1`).catch(() => ({ total: 0 })),
-      fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=1`).catch(() => ({ total: 0 })),
-    ]);
+    const profileData = await fetchScratch(`${SCRATCH_API}/users/${username}`);
 
-    // Fetch projects (up to 40)
-    let projects: any[] = [];
+    let projeler: any[] = [];
     try {
-      const p1 = await fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`);
-      projects = Array.isArray(p1) ? p1 : [];
+      const p = await fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`);
+      projeler = Array.isArray(p) ? p : [];
     } catch (_) {}
 
-    // Get follower/following counts using ScratchDB API for accurate counts
+    // Takipçi sayısı — ScratchDB ile dene
     let followers = 0;
     let following = 0;
     try {
-      const scratchDbRes = await fetch(`https://scratchdb.lefty.one/v3/user/info/${username}`, {
+      const dbRes = await fetch(`https://scratchdb.lefty.one/v3/user/info/${username}`, {
         headers: { "User-Agent": "ScratchAnalyzer/1.0" }
       });
-      if (scratchDbRes.ok) {
-        const scratchDbData = await scratchDbRes.json() as any;
-        followers = scratchDbData?.statistics?.followers || 0;
-        following = scratchDbData?.statistics?.following || 0;
+      if (dbRes.ok) {
+        const dbData = await dbRes.json() as any;
+        followers = dbData?.statistics?.followers || 0;
+        following = dbData?.statistics?.following || 0;
       }
     } catch (_) {}
 
-    // Fallback: count from API if ScratchDB failed
     if (followers === 0) {
       try {
-        // Fetch multiple pages to get a better estimate
         const pages = await Promise.all([
           fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=0`).catch(() => []),
           fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=40`).catch(() => []),
         ]);
-        const allFollowers = [...(pages[0] as any[]), ...(pages[1] as any[])];
-        followers = allFollowers.length;
-        // If we got 80, there are likely more - indicate with a +
-        if (followers >= 80) followers = 80;
+        followers = (pages[0] as any[]).length + (pages[1] as any[]).length;
       } catch (_) {}
     }
-
     if (following === 0) {
       try {
-        const followingList = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40`);
-        following = Array.isArray(followingList) ? followingList.length : 0;
+        const fl = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40`);
+        following = Array.isArray(fl) ? fl.length : 0;
       } catch (_) {}
     }
 
-    // Calculate aggregate stats
-    const total_projects = projects.length;
-    const total_loves = projects.reduce((s: number, p: any) => s + (p.stats?.loves || p.loves || 0), 0);
-    const total_favorites = projects.reduce((s: number, p: any) => s + (p.stats?.favorites || p.favorites || 0), 0);
-    const total_views = projects.reduce((s: number, p: any) => s + (p.stats?.views || p.views || 0), 0);
-    const total_remixes = projects.reduce((s: number, p: any) => s + (p.stats?.remixes || p.remixes || 0), 0);
-    const total_comments = projects.reduce((s: number, p: any) => s + (p.stats?.comments || p.comments || 0), 0);
+    const total_projects = projeler.length;
+    const total_loves = projeler.reduce((s: number, p: any) => s + (p.stats?.loves || p.loves || 0), 0);
+    const total_favorites = projeler.reduce((s: number, p: any) => s + (p.stats?.favorites || p.favorites || 0), 0);
+    const total_views = projeler.reduce((s: number, p: any) => s + (p.stats?.views || p.views || 0), 0);
+    const total_remixes = projeler.reduce((s: number, p: any) => s + (p.stats?.remixes || p.remixes || 0), 0);
+    const total_comments = projeler.reduce((s: number, p: any) => s + (p.stats?.comments || p.comments || 0), 0);
 
     const average_loves_per_project = total_projects > 0 ? total_loves / total_projects : 0;
     const average_views_per_project = total_projects > 0 ? total_views / total_projects : 0;
     const love_to_view_ratio = total_views > 0 ? total_loves / total_views : 0;
     const remix_rate = total_projects > 0 ? total_remixes / total_projects : 0;
+    const takip_orani = following > 0 ? followers / following : followers;
+    const yorum_orani = total_projects > 0 ? total_comments / total_projects : 0;
+    const gunluk_ortalama_goruntuleme = 0; // hesaplanacak aşağıda
 
     const joinDate = profileData.history?.joined || profileData.join_date || new Date().toISOString();
     const daysSinceJoin = Math.floor((Date.now() - new Date(joinDate).getTime()) / (1000 * 60 * 60 * 24));
     const monthsSinceJoin = daysSinceJoin / 30;
     const projects_per_month = monthsSinceJoin > 0 ? total_projects / monthsSinceJoin : 0;
 
-    // Last project
-    const sortedProjects = [...projects].sort((a, b) => {
+    // Batma Oranı: görüntüleyip beğenmeyen yüzdesi
+    const batma_orani = total_views > 0
+      ? Math.round(((total_views - total_loves) / total_views) * 100 * 10) / 10
+      : 100;
+
+    // Etkileşim Oranı: (sevgi+favori+yorum) / görüntüleme * 100
+    const etkilesim_orani = total_views > 0
+      ? Math.round(((total_loves + total_favorites + total_comments) / total_views) * 100 * 100) / 100
+      : 0;
+
+    // Verimlilik skoru: etkileşim/proje başına normalize
+    const verimlilik_skoru = total_projects > 0
+      ? Math.min(100, Math.round(((total_loves + total_favorites) / total_projects) / 10))
+      : 0;
+
+    const gunluk_goruntuleme = daysSinceJoin > 0
+      ? Math.round(total_views / daysSinceJoin * 10) / 10
+      : 0;
+
+    const sortedByDate = [...projeler].sort((a, b) => {
       const dateA = new Date(a.history?.shared || a.share_date || 0).getTime();
       const dateB = new Date(b.history?.shared || b.share_date || 0).getTime();
       return dateB - dateA;
     });
 
-    const lastProjectDate = sortedProjects.length > 0
-      ? (sortedProjects[0].history?.shared || sortedProjects[0].share_date || null)
+    const lastProjectDate = sortedByDate.length > 0
+      ? (sortedByDate[0].history?.shared || sortedByDate[0].share_date || null)
       : null;
 
     const isActive = lastProjectDate
       ? (Date.now() - new Date(lastProjectDate).getTime()) < 1000 * 60 * 60 * 24 * 90
       : false;
 
-    const monthly_projects = getMonthlyActivity(projects);
+    const aylikProjeler = getAylikAktivite(projeler);
 
-    const stats = {
+    const istatistikler = {
       followers,
       following,
       total_projects,
@@ -328,31 +343,82 @@ router.get("/user/:username", async (req, res) => {
       remix_rate: Math.round(remix_rate * 100) / 100,
       days_on_scratch: daysSinceJoin,
       projects_per_month: Math.round(projects_per_month * 10) / 10,
-      is_active: isActive,
+      batma_orani,
+      etkilesim_orani,
+      yorum_orani: Math.round(yorum_orani * 10) / 10,
+      takip_orani: Math.round(takip_orani * 10) / 10,
+      gunluk_ortalama_goruntuleme: gunluk_goruntuleme,
+      verimlilik_skoru,
+      aktif_mi: isActive,
+      aylik_veriler: aylikProjeler,
     };
 
-    const score = calculateScore(stats, profileData, projects);
-    const insights = generateInsights(stats, score, projects);
+    const skor = hesaplaSkor(istatistikler);
+    const icegorular = uretIcegorular(istatistikler, skor, projeler);
 
-    // Top projects by loves
-    const top_projects = sortedProjects
-      .sort((a, b) => (b.stats?.loves || b.loves || 0) - (a.stats?.loves || a.loves || 0))
-      .slice(0, 6)
-      .map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        description: p.description || "",
-        thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
-        loves: p.stats?.loves || p.loves || 0,
-        favorites: p.stats?.favorites || p.favorites || 0,
-        views: p.stats?.views || p.views || 0,
-        remixes: p.stats?.remixes || p.remixes || 0,
-        created: p.history?.created || p.created || "",
-        modified: p.history?.modified || p.modified || "",
-        share_date: p.history?.shared || p.share_date || "",
-        comments_allowed: p.comments_allowed !== false,
-        url: `https://scratch.mit.edu/projects/${p.id}`,
-      }));
+    // En iyi + en çok izlenen projeler
+    const sortedByLoves = [...projeler].sort((a, b) =>
+      (b.stats?.loves || b.loves || 0) - (a.stats?.loves || a.loves || 0)
+    );
+    const sortedByViews = [...projeler].sort((a, b) =>
+      (b.stats?.views || b.views || 0) - (a.stats?.views || a.views || 0)
+    );
+
+    const mapProject = (p: any) => ({
+      id: p.id,
+      title: p.title,
+      description: p.description || "",
+      thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+      loves: p.stats?.loves || p.loves || 0,
+      favorites: p.stats?.favorites || p.favorites || 0,
+      views: p.stats?.views || p.views || 0,
+      remixes: p.stats?.remixes || p.remixes || 0,
+      created: p.history?.created || p.created || "",
+      modified: p.history?.modified || p.modified || "",
+      share_date: p.history?.shared || p.share_date || "",
+      comments_allowed: p.comments_allowed !== false,
+      url: `https://scratch.mit.edu/projects/${p.id}`,
+    });
+
+    const topProjects = sortedByLoves.slice(0, 6).map(mapProject);
+
+    // Zayıf/güçlü proje oranları
+    const zayif_proje_orani = total_projects > 0
+      ? Math.round((projeler.filter((p: any) => (p.stats?.views || p.views || 0) < 100).length / total_projects) * 100)
+      : 0;
+    const guclu_proje_orani = total_projects > 0
+      ? Math.round((projeler.filter((p: any) => (p.stats?.views || p.views || 0) >= 1000).length / total_projects) * 100)
+      : 0;
+
+    const remix_edilme_orani = total_views > 0
+      ? Math.round((total_remixes / total_views) * 1000 * 10) / 10
+      : 0;
+
+    let topluluk_etkisi = "Sınırlı";
+    if (skor.topluluk >= 70) topluluk_etkisi = "Çok Güçlü";
+    else if (skor.topluluk >= 50) topluluk_etkisi = "Güçlü";
+    else if (skor.topluluk >= 30) topluluk_etkisi = "Orta";
+
+    let hesap_yaslanma_hizi = "Yavaş";
+    if (projects_per_month >= 3) hesap_yaslanma_hizi = "Hızlı Gelişen";
+    else if (projects_per_month >= 1) hesap_yaslanma_hizi = "Dengeli";
+    else if (projects_per_month >= 0.3) hesap_yaslanma_hizi = "Yavaş";
+    else hesap_yaslanma_hizi = "Durağan";
+
+    const tahmini_aylik_buyume = Math.round(
+      Math.min(50, (etkilesim_orani * 0.5 + projects_per_month * 2)) * 10
+    ) / 10;
+
+    let karsilastirma_skoru = "Ortanın Altı";
+    if (skor.genel >= 80) karsilastirma_skoru = "En İyi %10";
+    else if (skor.genel >= 65) karsilastirma_skoru = "En İyi %25";
+    else if (skor.genel >= 50) karsilastirma_skoru = "Ortalamanın Üstü";
+    else if (skor.genel >= 35) karsilastirma_skoru = "Ortalama";
+
+    let onerilen_tur = "Oyun";
+    if (total_loves > total_views * 0.05) onerilen_tur = "Animasyon";
+    else if (remix_rate > 0.3) onerilen_tur = "Remix & Sanat";
+    else onerilen_tur = "Etkileşimli Hikaye";
 
     const profile = {
       username: profileData.username,
@@ -362,32 +428,66 @@ router.get("/user/:username", async (req, res) => {
       country: profileData.profile?.country || "",
       status: profileData.profile?.status || "",
       join_date: joinDate,
-      avatar_url: profileData.profile?.images?.["90x90"] || `https://cdn2.scratch.mit.edu/get_image/user/${profileData.id}_60x60.png`,
+      avatar_url: profileData.profile?.images?.["90x90"] ||
+        `https://cdn2.scratch.mit.edu/get_image/user/${profileData.id}_60x60.png`,
       scratch_team: profileData.scratchteam || false,
     };
 
-    const analysis = {
+    const analiz = {
       username,
       profile,
-      stats,
-      insights,
-      score,
-      top_projects,
+      stats: {
+        followers,
+        following,
+        total_projects,
+        total_loves,
+        total_favorites,
+        total_views,
+        total_remixes,
+        total_comments,
+        average_loves_per_project: Math.round(average_loves_per_project * 10) / 10,
+        average_views_per_project: Math.round(average_views_per_project * 10) / 10,
+        love_to_view_ratio: Math.round(love_to_view_ratio * 1000) / 1000,
+        remix_rate: Math.round(remix_rate * 100) / 100,
+        days_on_scratch: daysSinceJoin,
+        projects_per_month: Math.round(projects_per_month * 10) / 10,
+        batma_orani,
+        etkilesim_orani,
+        yorum_orani: Math.round(yorum_orani * 10) / 10,
+        takip_orani: Math.round(takip_orani * 10) / 10,
+        gunluk_ortalama_goruntuleme: gunluk_goruntuleme,
+        verimlilik_skoru,
+      },
+      insights: icegorular,
+      score: skor,
+      top_projects: topProjects,
       activity: {
-        last_project_date: lastProjectDate,
-        is_active: isActive,
-        activity_streak: Math.floor(monthly_projects.filter((m) => m.count > 0).length / 2),
-        monthly_projects,
+        son_proje_tarihi: lastProjectDate,
+        aktif_mi: isActive,
+        aktivite_serisi: Math.floor(aylikProjeler.filter((m) => m.sayi > 0).length / 2),
+        aylik_projeler: aylikProjeler,
+      },
+      advanced: {
+        en_iyi_proje: sortedByLoves[0] ? mapProject(sortedByLoves[0]) : null,
+        en_cok_izlenen: sortedByViews[0] ? mapProject(sortedByViews[0]) : null,
+        remix_edilme_orani,
+        topluluk_etkisi,
+        hesap_yaslanma_hizi,
+        tahmini_aylik_buyume,
+        karsilastirma_skoru,
+        onerilen_tur,
+        zayif_proje_orani,
+        guclu_proje_orani,
       },
     };
 
-    res.json(analysis);
+    res.json(analiz);
   } catch (err: any) {
     if (err.status === 404) {
-      res.status(404).json({ error: "not_found", message: `User "${username}" not found on Scratch` });
+      res.status(404).json({ error: "not_found", message: `"${username}" kullanıcısı Scratch'te bulunamadı` });
     } else {
-      req.log.error(err, "Error fetching Scratch user");
-      res.status(500).json({ error: "server_error", message: "Failed to fetch user data" });
+      req.log.error(err, "Scratch kullanıcısı alınırken hata");
+      res.status(500).json({ error: "server_error", message: "Kullanıcı verileri alınamadı" });
     }
   }
 });
@@ -397,16 +497,16 @@ router.get("/user/:username/projects", async (req, res) => {
   const limit = Math.min(40, Number(req.query.limit) || 20);
 
   try {
-    const projects = await fetchScratch(
+    const projeler = await fetchScratch(
       `${SCRATCH_API}/users/${username}/projects?limit=${limit}&offset=0`
     );
 
-    if (!Array.isArray(projects)) {
-      res.status(404).json({ error: "not_found", message: `User "${username}" not found` });
+    if (!Array.isArray(projeler)) {
+      res.status(404).json({ error: "not_found", message: `"${username}" bulunamadı` });
       return;
     }
 
-    const mapped = projects.map((p: any) => ({
+    const mapped = projeler.map((p: any) => ({
       id: p.id,
       title: p.title,
       description: p.description || "",
@@ -425,10 +525,10 @@ router.get("/user/:username/projects", async (req, res) => {
     res.json({ username, projects: mapped, total: mapped.length });
   } catch (err: any) {
     if (err.status === 404) {
-      res.status(404).json({ error: "not_found", message: `User "${username}" not found` });
+      res.status(404).json({ error: "not_found", message: `"${username}" bulunamadı` });
     } else {
-      req.log.error(err, "Error fetching Scratch projects");
-      res.status(500).json({ error: "server_error", message: "Failed to fetch projects" });
+      req.log.error(err, "Scratch projeleri alınırken hata");
+      res.status(500).json({ error: "server_error", message: "Projeler alınamadı" });
     }
   }
 });

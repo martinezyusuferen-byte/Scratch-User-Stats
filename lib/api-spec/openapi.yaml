@@ -31,7 +31,6 @@ paths:
       operationId: getScratchUser
       tags: [scratch]
       summary: Get Scratch user analysis
-      description: Fetches and analyzes a Scratch user profile with statistics and insights
       parameters:
         - name: username
           in: path
@@ -63,7 +62,6 @@ paths:
       operationId: getScratchUserProjects
       tags: [scratch]
       summary: Get user projects with stats
-      description: Returns all public projects with detailed statistics for a Scratch user
       parameters:
         - name: username
           in: path
@@ -170,6 +168,8 @@ components:
             $ref: "#/components/schemas/ScratchProject"
         activity:
           $ref: "#/components/schemas/ScratchActivity"
+        advanced:
+          $ref: "#/components/schemas/ScratchAdvanced"
       required:
         - username
         - profile
@@ -178,6 +178,7 @@ components:
         - score
         - top_projects
         - activity
+        - advanced
 
     ScratchProfile:
       type: object
@@ -238,6 +239,24 @@ components:
           type: integer
         projects_per_month:
           type: number
+        batma_orani:
+          type: number
+          description: "Batma Oranı: görüntüleyip sevmeyen kullanıcı yüzdesi"
+        etkilesim_orani:
+          type: number
+          description: "Etkileşim Oranı: (sevgi+favori+yorum)/görüntüleme*100"
+        yorum_orani:
+          type: number
+          description: "Proje başına düşen ortalama yorum"
+        takip_orani:
+          type: number
+          description: "Takipçi/Takip edilen oranı"
+        gunluk_ortalama_goruntuleme:
+          type: number
+          description: "Günlük ortalama görüntülenme"
+        verimlilik_skoru:
+          type: number
+          description: "Proje başına etkileşim verimliliği"
       required:
         - followers
         - following
@@ -253,117 +272,174 @@ components:
         - remix_rate
         - days_on_scratch
         - projects_per_month
+        - batma_orani
+        - etkilesim_orani
+        - yorum_orani
+        - takip_orani
+        - gunluk_ortalama_goruntuleme
+        - verimlilik_skoru
 
     ScratchInsights:
       type: object
       properties:
-        strengths:
+        guclu_yonler:
           type: array
           items:
             type: string
-        weaknesses:
+        gelistirilecek_yonler:
           type: array
           items:
             type: string
-        growth_tips:
+        buyume_onerileri:
           type: array
           items:
             $ref: "#/components/schemas/GrowthTip"
-        creator_type:
+        icerik_turu:
           type: string
-        activity_level:
+        aktivite_seviyesi:
           type: string
-        engagement_quality:
+        etkilesim_kalitesi:
           type: string
-        best_performing_category:
+        buyume_trendi:
+          type: string
+          description: "Yükselen / Sabit / Düşen"
+        en_iyi_paylasim_zamani:
+          type: string
+        icerik_tutarliligi:
           type: string
       required:
-        - strengths
-        - weaknesses
-        - growth_tips
-        - creator_type
-        - activity_level
-        - engagement_quality
+        - guclu_yonler
+        - gelistirilecek_yonler
+        - buyume_onerileri
+        - icerik_turu
+        - aktivite_seviyesi
+        - etkilesim_kalitesi
+        - buyume_trendi
+        - en_iyi_paylasim_zamani
+        - icerik_tutarliligi
 
     GrowthTip:
       type: object
       properties:
-        category:
+        kategori:
           type: string
-        tip:
+        oneri:
           type: string
-        priority:
+        oncelik:
           type: string
-          enum: [high, medium, low]
-        impact:
+          enum: [yuksek, orta, dusuk]
+        etki:
           type: string
       required:
-        - category
-        - tip
-        - priority
-        - impact
+        - kategori
+        - oneri
+        - oncelik
+        - etki
 
     ScratchScore:
       type: object
       properties:
-        overall:
+        genel:
           type: integer
-        engagement:
+        etkilesim:
           type: integer
-        creativity:
+        yaraticilik:
           type: integer
-        community:
+        topluluk:
           type: integer
-        consistency:
+        tutarlilik:
           type: integer
-        growth_potential:
+        buyume_potansiyeli:
           type: integer
-        rank:
+        rutbe:
           type: string
-        rank_icon:
+        rutbe_ikonu:
           type: string
-        percentile:
+        yuzdeLik:
           type: number
       required:
-        - overall
-        - engagement
-        - creativity
-        - community
-        - consistency
-        - growth_potential
-        - rank
-        - rank_icon
-        - percentile
+        - genel
+        - etkilesim
+        - yaraticilik
+        - topluluk
+        - tutarlilik
+        - buyume_potansiyeli
+        - rutbe
+        - rutbe_ikonu
+        - yuzdeLik
 
     ScratchActivity:
       type: object
       properties:
-        last_project_date:
+        son_proje_tarihi:
           type: string
           nullable: true
-        is_active:
+        aktif_mi:
           type: boolean
-        activity_streak:
+        aktivite_serisi:
           type: integer
-        monthly_projects:
+        aylik_projeler:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyActivity"
       required:
-        - is_active
-        - activity_streak
-        - monthly_projects
+        - aktif_mi
+        - aktivite_serisi
+        - aylik_projeler
 
     MonthlyActivity:
       type: object
       properties:
-        month:
+        ay:
           type: string
-        count:
+        sayi:
           type: integer
       required:
-        - month
-        - count
+        - ay
+        - sayi
+
+    ScratchAdvanced:
+      type: object
+      properties:
+        en_iyi_proje:
+          $ref: "#/components/schemas/ScratchProject"
+          nullable: true
+        en_cok_izlenen:
+          $ref: "#/components/schemas/ScratchProject"
+          nullable: true
+        remix_edilme_orani:
+          type: number
+          description: "1000 görüntülemede kaç kez remix edildi"
+        topluluk_etkisi:
+          type: string
+          description: "Topluluk üzerindeki etki seviyesi"
+        hesap_yaslanma_hizi:
+          type: string
+          description: "Proje üretme hızına göre hesap olgunluğu"
+        tahmini_aylik_buyume:
+          type: number
+          description: "Tahmini aylık takipçi büyüme yüzdesi"
+        karsilastirma_skoru:
+          type: string
+          description: "Benzer kullanıcılarla kıyasla"
+        onerilen_tur:
+          type: string
+          description: "Daha iyi performans için önerilen proje türü"
+        zayif_proje_orani:
+          type: number
+          description: "100'den az görüntüleme alan proje yüzdesi"
+        guclu_proje_orani:
+          type: number
+          description: "1000+ görüntüleme alan proje yüzdesi"
+      required:
+        - remix_edilme_orani
+        - topluluk_etkisi
+        - hesap_yaslanma_hizi
+        - tahmini_aylik_buyume
+        - karsilastirma_skoru
+        - onerilen_tur
+        - zayif_proje_orani
+        - guclu_proje_orani
 
     ScratchProjectsResponse:
       type: object

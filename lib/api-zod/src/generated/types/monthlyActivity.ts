@@ -7,6 +7,6 @@
  */
 
 export interface MonthlyActivity {
-  month: string;
-  count: number;
+  ay: string;
+  sayi: number;
 }

@@ -8,11 +8,14 @@
 import type { GrowthTip } from "./growthTip";
 
 export interface ScratchInsights {
-  strengths: string[];
-  weaknesses: string[];
-  growth_tips: GrowthTip[];
-  creator_type: string;
-  activity_level: string;
-  engagement_quality: string;
-  best_performing_category?: string;
+  guclu_yonler: string[];
+  gelistirilecek_yonler: string[];
+  buyume_onerileri: GrowthTip[];
+  icerik_turu: string;
+  aktivite_seviyesi: string;
+  etkilesim_kalitesi: string;
+  /** Yükselen / Sabit / Düşen */
+  buyume_trendi: string;
+  en_iyi_paylasim_zamani: string;
+  icerik_tutarliligi: string;
 }

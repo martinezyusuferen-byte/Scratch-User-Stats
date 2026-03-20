@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Search, Sparkles, Activity, Target } from "lucide-react";
+import { Search, BarChart2, Target, TrendingUp, Users, Zap, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const ornekKullanicilar = ["griffpatch", "Will_Wam", "ceebee", "ScratchCat"];
 
 export default function Home() {
   const [username, setUsername] = useState("");
@@ -11,43 +13,42 @@ export default function Home() {
   const handleAnalyze = (e: React.FormEvent) => {
     e.preventDefault();
     if (username.trim()) {
-      setLocation(`/user/${encodeURIComponent(username.trim())}`);
+      setLocation(`/kullanici/${encodeURIComponent(username.trim())}`);
     }
   };
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden">
-      {/* Hero Background */}
       <div className="absolute inset-0 z-0">
-        <img 
+        <img
           src={`${import.meta.env.BASE_URL}images/hero-bg.png`}
-          alt="Abstract analytics background"
-          className="w-full h-full object-cover opacity-40 mix-blend-screen"
+          alt="Arka plan"
+          className="w-full h-full object-cover opacity-35 mix-blend-screen"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-transparent" />
       </div>
 
-      <div className="relative z-10 w-full max-w-4xl px-6 flex flex-col items-center">
+      <div className="relative z-10 w-full max-w-4xl px-4 sm:px-6 flex flex-col items-center py-12">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="text-center mb-12"
+          className="text-center mb-10"
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md mb-6">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium text-white/80">AI-Powered Scratch Analytics</span>
+            <Zap className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium text-white/80">Gelişmiş Scratch Analizi</span>
           </div>
-          <h1 className="text-5xl md:text-7xl font-display font-bold mb-6 leading-tight">
-            Analyze. Improve. <br />
-            <span className="text-gradient">Dominate Scratch.</span>
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-display font-bold mb-5 leading-tight">
+            Analiz Et. Geliş. <br />
+            <span className="text-gradient">Scratch'te Öne Çık.</span>
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-            Get deep insights, AI-driven growth tips, and comprehensive statistics for any Scratch creator.
+          <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
+            Herhangi bir Scratch kullanıcısının derinlemesine istatistiklerini, etkileşim metriklerini ve büyüme önerilerini görüntüle.
           </p>
         </motion.div>
 
-        <motion.form 
+        <motion.form
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, delay: 0.3 }}
@@ -56,50 +57,77 @@ export default function Home() {
         >
           <div className="absolute -inset-1 bg-gradient-to-r from-primary to-accent rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-500" />
           <div className="relative flex items-center bg-background/80 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl">
-            <div className="pl-4 pr-2">
-              <Search className="w-6 h-6 text-muted-foreground" />
+            <div className="pl-3 sm:pl-4 pr-2">
+              <Search className="w-5 h-5 sm:w-6 sm:h-6 text-muted-foreground" />
             </div>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter Scratch username..."
-              className="flex-1 bg-transparent border-none outline-none text-xl text-white placeholder:text-white/30 px-2 py-4 font-display"
+              placeholder="Scratch kullanıcı adı gir..."
+              className="flex-1 bg-transparent border-none outline-none text-base sm:text-xl text-white placeholder:text-white/30 px-2 py-3 sm:py-4 font-display"
               required
             />
             <button
               type="submit"
               disabled={!username.trim()}
               className={cn(
-                "px-8 py-4 rounded-xl font-bold text-lg transition-all duration-300",
-                username.trim() 
-                  ? "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,107,0,0.4)] hover:bg-primary/90 hover:scale-105" 
+                "px-5 sm:px-8 py-3 sm:py-4 rounded-xl font-bold text-base sm:text-lg transition-all duration-300 whitespace-nowrap",
+                username.trim()
+                  ? "bg-primary text-primary-foreground shadow-[0_0_20px_rgba(255,107,0,0.4)] hover:bg-primary/90 hover:scale-105"
                   : "bg-white/10 text-white/30 cursor-not-allowed"
               )}
             >
-              Analyze
+              Analiz Et
             </button>
           </div>
         </motion.form>
 
-        <motion.div 
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.5 }}
+          className="mt-5 flex flex-wrap items-center gap-2 justify-center"
+        >
+          <span className="text-xs text-muted-foreground">Örnek:</span>
+          {ornekKullanicilar.map((k) => (
+            <button
+              key={k}
+              onClick={() => setLocation(`/kullanici/${k}`)}
+              className="text-xs px-3 py-1.5 rounded-full bg-white/5 border border-white/10 hover:bg-primary/20 hover:border-primary/40 hover:text-primary transition-all duration-200"
+            >
+              {k}
+            </button>
+          ))}
+        </motion.div>
+
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 1, delay: 0.8 }}
-          className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-4xl"
+          className="mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 w-full"
         >
           {[
-            { icon: Activity, title: "Deep Stats", desc: "Views, loves, and real engagement metrics." },
-            { icon: Target, title: "Smart Scoring", desc: "Proprietary algorithm grading overall impact." },
-            { icon: Sparkles, title: "Growth Tips", desc: "Actionable advice to reach more users." }
-          ].map((feature, i) => (
-            <div key={i} className="flex flex-col items-center text-center p-6 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
-              <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center mb-4">
-                <feature.icon className="w-6 h-6 text-primary" />
+            { icon: BarChart2, baslik: "Derin İstatistikler", aciklama: "Görüntüleme, beğeni ve gerçek etkileşim metrikleri." },
+            { icon: Target, baslik: "Batma Oranı", aciklama: "İçeriğini kaç kişinin beğenmeden terk ettiğini öğren." },
+            { icon: TrendingUp, baslik: "Büyüme Analizi", aciklama: "Aylık aktivite, trendler ve performans kıyaslaması." },
+            { icon: Users, baslik: "Topluluk Etkisi", aciklama: "Takipçi/takip oranı ve topluluk içindeki konumun." },
+            { icon: Star, baslik: "Proje Puanlama", aciklama: "Özel algoritmamızla genel etki skoru hesaplaması." },
+            { icon: Zap, baslik: "Büyüme Önerileri", aciklama: "Daha fazla kullanıcıya ulaşmak için somut ipuçları." },
+          ].map((ozellik, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.9 + i * 0.1 }}
+              className="flex flex-col items-center text-center p-4 sm:p-6 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:border-primary/20 hover:bg-white/[0.04] transition-all"
+            >
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/20 flex items-center justify-center mb-3">
+                <ozellik.icon className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
               </div>
-              <h3 className="font-display font-semibold text-lg mb-2">{feature.title}</h3>
-              <p className="text-sm text-muted-foreground">{feature.desc}</p>
-            </div>
+              <h3 className="font-display font-semibold text-sm sm:text-base mb-1">{ozellik.baslik}</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">{ozellik.aciklama}</p>
+            </motion.div>
           ))}
         </motion.div>
       </div>

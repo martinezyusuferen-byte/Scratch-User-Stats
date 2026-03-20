@@ -8,8 +8,8 @@
 import type { MonthlyActivity } from "./monthlyActivity";
 
 export interface ScratchActivity {
-  last_project_date?: string | null;
-  is_active: boolean;
-  activity_streak: number;
-  monthly_projects: MonthlyActivity[];
+  son_proje_tarihi?: string | null;
+  aktif_mi: boolean;
+  aktivite_serisi: number;
+  aylik_projeler: MonthlyActivity[];
 }

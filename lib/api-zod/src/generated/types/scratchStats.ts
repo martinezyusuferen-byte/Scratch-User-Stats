@@ -21,4 +21,16 @@ export interface ScratchStats {
   remix_rate: number;
   days_on_scratch: number;
   projects_per_month: number;
+  /** Batma Oranı: görüntüleyip sevmeyen kullanıcı yüzdesi */
+  batma_orani: number;
+  /** Etkileşim Oranı: (sevgi+favori+yorum)/görüntüleme*100 */
+  etkilesim_orani: number;
+  /** Proje başına düşen ortalama yorum */
+  yorum_orani: number;
+  /** Takipçi/Takip edilen oranı */
+  takip_orani: number;
+  /** Günlük ortalama görüntülenme */
+  gunluk_ortalama_goruntuleme: number;
+  /** Proje başına etkileşim verimliliği */
+  verimlilik_skoru: number;
 }

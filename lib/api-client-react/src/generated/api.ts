@@ -107,7 +107,6 @@ export function useHealthCheck<
 }
 
 /**
- * Fetches and analyzes a Scratch user profile with statistics and insights
  * @summary Get Scratch user analysis
  */
 export const getGetScratchUserUrl = (username: string) => {
@@ -196,7 +195,6 @@ export function useGetScratchUser<
 }
 
 /**
- * Returns all public projects with detailed statistics for a Scratch user
  * @summary Get user projects with stats
  */
 export const getGetScratchUserProjectsUrl = (

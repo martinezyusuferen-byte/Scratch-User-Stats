@@ -57,56 +57,92 @@ export interface ScratchStats {
   remix_rate: number;
   days_on_scratch: number;
   projects_per_month: number;
+  /** Batma Oranı: görüntüleyip sevmeyen kullanıcı yüzdesi */
+  batma_orani: number;
+  /** Etkileşim Oranı: (sevgi+favori+yorum)/görüntüleme*100 */
+  etkilesim_orani: number;
+  /** Proje başına düşen ortalama yorum */
+  yorum_orani: number;
+  /** Takipçi/Takip edilen oranı */
+  takip_orani: number;
+  /** Günlük ortalama görüntülenme */
+  gunluk_ortalama_goruntuleme: number;
+  /** Proje başına etkileşim verimliliği */
+  verimlilik_skoru: number;
 }
 
-export type GrowthTipPriority =
-  (typeof GrowthTipPriority)[keyof typeof GrowthTipPriority];
+export type GrowthTipOncelik =
+  (typeof GrowthTipOncelik)[keyof typeof GrowthTipOncelik];
 
-export const GrowthTipPriority = {
-  high: "high",
-  medium: "medium",
-  low: "low",
+export const GrowthTipOncelik = {
+  yuksek: "yuksek",
+  orta: "orta",
+  dusuk: "dusuk",
 } as const;
 
 export interface GrowthTip {
-  category: string;
-  tip: string;
-  priority: GrowthTipPriority;
-  impact: string;
+  kategori: string;
+  oneri: string;
+  oncelik: GrowthTipOncelik;
+  etki: string;
 }
 
 export interface ScratchInsights {
-  strengths: string[];
-  weaknesses: string[];
-  growth_tips: GrowthTip[];
-  creator_type: string;
-  activity_level: string;
-  engagement_quality: string;
-  best_performing_category?: string;
+  guclu_yonler: string[];
+  gelistirilecek_yonler: string[];
+  buyume_onerileri: GrowthTip[];
+  icerik_turu: string;
+  aktivite_seviyesi: string;
+  etkilesim_kalitesi: string;
+  /** Yükselen / Sabit / Düşen */
+  buyume_trendi: string;
+  en_iyi_paylasim_zamani: string;
+  icerik_tutarliligi: string;
 }
 
 export interface ScratchScore {
-  overall: number;
-  engagement: number;
-  creativity: number;
-  community: number;
-  consistency: number;
-  growth_potential: number;
-  rank: string;
-  rank_icon: string;
-  percentile: number;
+  genel: number;
+  etkilesim: number;
+  yaraticilik: number;
+  topluluk: number;
+  tutarlilik: number;
+  buyume_potansiyeli: number;
+  rutbe: string;
+  rutbe_ikonu: string;
+  yuzdeLik: number;
 }
 
 export interface MonthlyActivity {
-  month: string;
-  count: number;
+  ay: string;
+  sayi: number;
 }
 
 export interface ScratchActivity {
-  last_project_date?: string | null;
-  is_active: boolean;
-  activity_streak: number;
-  monthly_projects: MonthlyActivity[];
+  son_proje_tarihi?: string | null;
+  aktif_mi: boolean;
+  aktivite_serisi: number;
+  aylik_projeler: MonthlyActivity[];
+}
+
+export interface ScratchAdvanced {
+  en_iyi_proje?: ScratchProject | null;
+  en_cok_izlenen?: ScratchProject | null;
+  /** 1000 görüntülemede kaç kez remix edildi */
+  remix_edilme_orani: number;
+  /** Topluluk üzerindeki etki seviyesi */
+  topluluk_etkisi: string;
+  /** Proje üretme hızına göre hesap olgunluğu */
+  hesap_yaslanma_hizi: string;
+  /** Tahmini aylık takipçi büyüme yüzdesi */
+  tahmini_aylik_buyume: number;
+  /** Benzer kullanıcılarla kıyasla */
+  karsilastirma_skoru: string;
+  /** Daha iyi performans için önerilen proje türü */
+  onerilen_tur: string;
+  /** 100'den az görüntüleme alan proje yüzdesi */
+  zayif_proje_orani: number;
+  /** 1000+ görüntüleme alan proje yüzdesi */
+  guclu_proje_orani: number;
 }
 
 export interface ScratchUserAnalysis {
@@ -117,6 +153,7 @@ export interface ScratchUserAnalysis {
   score: ScratchScore;
   top_projects: ScratchProject[];
   activity: ScratchActivity;
+  advanced: ScratchAdvanced;
 }
 
 export interface ScratchProjectsResponse {

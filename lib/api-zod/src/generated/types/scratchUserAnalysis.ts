@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ScratchActivity } from "./scratchActivity";
+import type { ScratchAdvanced } from "./scratchAdvanced";
 import type { ScratchInsights } from "./scratchInsights";
 import type { ScratchProfile } from "./scratchProfile";
 import type { ScratchProject } from "./scratchProject";
@@ -20,4 +21,5 @@ export interface ScratchUserAnalysis {
   score: ScratchScore;
   top_projects: ScratchProject[];
   activity: ScratchActivity;
+  advanced: ScratchAdvanced;
 }

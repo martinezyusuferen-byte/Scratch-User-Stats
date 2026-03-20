@@ -2,7 +2,6 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
 
@@ -19,8 +18,16 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/kullanici/:username" component={Dashboard} />
       <Route path="/user/:username" component={Dashboard} />
-      <Route component={NotFound} />
+      <Route component={() => (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-2">Sayfa Bulunamadı</h2>
+            <a href="/" className="text-primary hover:underline">Ana Sayfaya Dön</a>
+          </div>
+        </div>
+      )} />
     </Switch>
   );
 }
