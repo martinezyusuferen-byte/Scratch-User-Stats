@@ -65,6 +65,13 @@ export default function Dashboard() {
   const [aramaInput, setAramaInput] = useState("");
   const raporRef = useRef<HTMLDivElement>(null);
 
+  // Yorum / oturum token state
+  const [yorumModalAcik, setYorumModalAcik] = useState(false);
+  const [sessionToken, setSessionToken] = useState("");
+  const [yorumVerisi, setYorumVerisi] = useState<{ total_comments: number; proje_yorumlar: Array<{id:number;title:string;yorumlar:number}> } | null>(null);
+  const [yorumYukleniyor, setYorumYukleniyor] = useState(false);
+  const [yorumHata, setYorumHata] = useState<string | null>(null);
+
   const { data: analiz, isLoading, error } = useGetScratchUser(username || "");
   const { data: projelerData, isLoading: projelerYukleniyor } = useGetScratchUserProjects(username || "", { limit: 9 });
 
@@ -81,6 +88,28 @@ export default function Dashboard() {
       navigator.share({ title: `${username} - Scratch Analizi`, url: window.location.href });
     } else {
       navigator.clipboard.writeText(window.location.href);
+    }
+  };
+
+  const handleYorumBaglan = async () => {
+    if (!sessionToken.trim()) return;
+    setYorumYukleniyor(true);
+    setYorumHata(null);
+    try {
+      const res = await fetch(
+        `/api/scratch/user/${encodeURIComponent(username || "")}/authenticated-stats?token=${encodeURIComponent(sessionToken.trim())}`
+      );
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.message || "Bağlantı başarısız");
+      }
+      const d = await res.json();
+      setYorumVerisi(d);
+      setYorumModalAcik(false);
+    } catch (e: any) {
+      setYorumHata(e.message || "Hata oluştu. Token'ı kontrol et.");
+    } finally {
+      setYorumYukleniyor(false);
     }
   };
 
@@ -103,20 +132,45 @@ export default function Dashboard() {
   }
 
   if (error || !analiz) {
+    const errData = (error as any)?.data;
+    const isRateLimit = (error as any)?.status === 429 || errData?.error === "rate_limited";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6">
         <GlassCard className="max-w-md w-full p-8 text-center" gradient>
-          <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
-          <h2 className="text-2xl font-display font-bold mb-2">Kullanıcı Bulunamadı</h2>
-          <p className="text-muted-foreground mb-8">
-            "{username}" adlı Scratch profili bulunamadı. Kullanıcı adının doğru yazıldığından emin ol.
-          </p>
-          <button
-            onClick={() => setLocation("/")}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors font-semibold"
-          >
-            ← Ana Sayfaya Dön
-          </button>
+          {isRateLimit ? (
+            <>
+              <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">
+                <span className="text-3xl">⏳</span>
+              </div>
+              <h2 className="text-2xl font-display font-bold mb-2 text-yellow-400">Scratch API Meşgul</h2>
+              <p className="text-muted-foreground mb-4">
+                Scratch sunucuları şu an çok fazla istek aldı. 1–2 dakika bekleyip tekrar dene.
+              </p>
+              <p className="text-xs text-white/30 mb-8">Bu geçici bir durumdur, kullanıcı adı doğruysa veriler gelecektir.</p>
+            </>
+          ) : (
+            <>
+              <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+              <h2 className="text-2xl font-display font-bold mb-2">Kullanıcı Bulunamadı</h2>
+              <p className="text-muted-foreground mb-8">
+                "{username}" adlı Scratch profili bulunamadı. Kullanıcı adının doğru yazıldığından emin ol.
+              </p>
+            </>
+          )}
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 transition-colors font-semibold"
+            >
+              ↻ Tekrar Dene
+            </button>
+            <button
+              onClick={() => setLocation("/")}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-colors font-semibold"
+            >
+              ← Ana Sayfaya Dön
+            </button>
+          </div>
         </GlassCard>
       </div>
     );
@@ -176,6 +230,18 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 mt-4 sm:mt-6">
+        {(analiz as any).data_quality === "rate_limited" && (
+          <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-400">
+            <span className="text-xl shrink-0">⏳</span>
+            <div>
+              <span className="font-semibold">Scratch API geçici olarak yoğun.</span>{" "}
+              <span className="text-yellow-400/70">İstatistikler kısmi olabilir. 1–2 dakika bekleyip sayfayı yenile.</span>
+            </div>
+            <button onClick={() => window.location.reload()} className="ml-auto shrink-0 px-3 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-xs font-semibold transition-colors">
+              Yenile
+            </button>
+          </div>
+        )}
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-4 sm:space-y-6">
 
           {/* Profil + Skor — üst bölüm */}
@@ -414,10 +480,11 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground">Toplam Yorum</span>
-                    <span className="font-bold text-sm text-orange-400/70 flex items-center gap-1">
-                      <span>Gizli</span>
-                      <span className="text-[10px] text-muted-foreground font-normal">(Scratch API kısıtlı)</span>
-                    </span>
+                    {yorumVerisi ? (
+                      <span className="font-bold text-sm text-orange-400">{yorumVerisi.total_comments.toLocaleString("tr-TR")}</span>
+                    ) : (
+                      <span className="font-bold text-sm text-muted-foreground/50 italic text-xs">Giriş gerekli</span>
+                    )}
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground">Yorum Durumu</span>
@@ -429,11 +496,22 @@ export default function Dashboard() {
                     <span className="text-xs text-muted-foreground">Aktivite Seviyesi</span>
                     <span className="font-bold text-sm text-accent">{analiz.insights.etkilesim_kalitesi}</span>
                   </div>
-                  <div className="mt-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                    <p className="text-[10px] text-orange-400/80 leading-relaxed">
-                      Scratch, yorum sayısını herkese açık API üzerinden sağlamıyor. Bu Scratch'in bir kısıtlamasıdır, uygulamamızın değil.
-                    </p>
-                  </div>
+                  {yorumVerisi && yorumVerisi.proje_yorumlar.length > 0 && (
+                    <div className="mt-1 space-y-1">
+                      {yorumVerisi.proje_yorumlar.slice(0, 3).map(p => (
+                        <div key={p.id} className="flex justify-between items-center text-[11px]">
+                          <span className="text-muted-foreground truncate max-w-[130px]">{p.title}</span>
+                          <span className="text-orange-400 font-semibold">{p.yorumlar} yorum</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setYorumModalAcik(true)}
+                    className="w-full mt-1 py-2 text-xs font-semibold rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-400 border border-orange-500/30 transition-all"
+                  >
+                    {yorumVerisi ? "🔄 Yenile" : "🔐 Scratch Oturumu ile Yorumları Gör"}
+                  </button>
                 </div>
               </GlassCard>
 
@@ -1202,6 +1280,67 @@ export default function Dashboard() {
 
         </motion.div>
       </main>
+
+      {/* Scratch Oturum Token Modalı */}
+      {yorumModalAcik && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setYorumModalAcik(false); }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md"
+          >
+            <GlassCard className="p-6" gradient>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-display font-bold flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-orange-400" />
+                  Scratch Oturumu ile Yorumları Gör
+                </h3>
+                <button onClick={() => setYorumModalAcik(false)} className="text-muted-foreground hover:text-white transition-colors text-xl">✕</button>
+              </div>
+
+              <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-2">
+                <p className="text-xs font-semibold text-blue-400">Nasıl yapılır? (3 adım)</p>
+                <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                  <li>Tarayıcında <strong className="text-white">scratch.mit.edu</strong>'ya giriş yap</li>
+                  <li>F12 → Application → Cookies → scratch.mit.edu</li>
+                  <li><strong className="text-orange-400">scratchsessionsid</strong> değerini kopyala ve buraya yapıştır</li>
+                </ol>
+              </div>
+
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={sessionToken}
+                  onChange={e => setSessionToken(e.target.value)}
+                  placeholder="scratchsessionsid değerini buraya yapıştır..."
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 placeholder:text-white/20 font-mono"
+                />
+                {yorumHata && (
+                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-2">{yorumHata}</p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setYorumModalAcik(false)}
+                    className="flex-1 py-2.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-semibold transition-colors"
+                  >
+                    İptal
+                  </button>
+                  <button
+                    onClick={handleYorumBaglan}
+                    disabled={!sessionToken.trim() || yorumYukleniyor}
+                    className="flex-1 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-400 disabled:bg-orange-500/40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+                  >
+                    {yorumYukleniyor ? "Yükleniyor..." : "Bağlan"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground/50 text-center">
+                  Token sadece yorum verilerini çekmek için kullanılır, saklanmaz.
+                </p>
+              </div>
+            </GlassCard>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

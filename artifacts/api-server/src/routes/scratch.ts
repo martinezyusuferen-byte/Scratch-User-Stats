@@ -5,20 +5,69 @@ const router: IRouter = Router();
 const SCRATCH_API = "https://api.scratch.mit.edu";
 const SCRATCH_CDN = "https://cdn2.scratch.mit.edu";
 
-async function fetchScratch(url: string) {
+// ── Basit bellek önbelleği (5 dakika TTL) ──
+const cache = new Map<string, { data: any; ts: number }>();
+const CACHE_TTL = 5 * 60 * 1000;
+
+function cacheGet(key: string) {
+  const e = cache.get(key);
+  if (!e) return null;
+  if (Date.now() - e.ts > CACHE_TTL) { cache.delete(key); return null; }
+  return e.data;
+}
+function cacheSet(key: string, data: any) {
+  if (cache.size > 200) {
+    const oldest = Array.from(cache.keys())[0];
+    cache.delete(oldest);
+  }
+  cache.set(key, { data, ts: Date.now() });
+}
+
+async function doFetch(url: string): Promise<any> {
   const res = await fetch(url, {
     headers: { "User-Agent": "ScratchAnalyzer/1.0", "Accept": "application/json" },
+    signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) {
     const err = new Error(`Scratch API error: ${res.status}`);
     (err as any).status = res.status;
     throw err;
   }
-  return res.json();
+  const data = await res.json();
+  // Scratch bazen HTTP 200 ile rate limit mesajı döndürür: {"response":"Too many requests"}
+  if (data && typeof data === "object" && !Array.isArray(data) && "response" in data) {
+    const errStatus = String(data.response).toLowerCase().includes("not found") ? 404 : 429;
+    const err = new Error(`Scratch API: ${data.response}`);
+    (err as any).status = errStatus;
+    throw err;
+  }
+  // Scratch 200 ile 404: {"code":"NotFound"}
+  if (data && typeof data === "object" && !Array.isArray(data) && data.code === "NotFound") {
+    const err = new Error("Scratch: NotFound");
+    (err as any).status = 404;
+    throw err;
+  }
+  return data;
 }
 
-async function fetchScratchSafe(url: string): Promise<any> {
-  try { return await fetchScratch(url); } catch { return null; }
+async function fetchScratch(url: string): Promise<any> {
+  const cached = cacheGet(url);
+  if (cached) return cached;
+
+  try {
+    const data = await doFetch(url);
+    cacheSet(url, data);
+    return data;
+  } catch (e: any) {
+    if (e?.status === 429) {
+      // Rate limit — 2 saniye bekle ve bir kez daha dene
+      await new Promise(r => setTimeout(r, 2000));
+      const data2 = await doFetch(url);
+      cacheSet(url, data2);
+      return data2;
+    }
+    throw e;
+  }
 }
 
 function hesaplaRutbe(skor: number) {
@@ -503,32 +552,22 @@ router.get("/user/:username", async (req, res) => {
 
     // Projeleri çek (iki sayfa, 80 proje)
     let projeler: any[] = [];
+    let projelerRateLimit = false;
     try {
       const [p1, p2] = await Promise.all([
-        fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`).catch(() => []),
-        fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=40&offset=40`).catch(() => []),
+        fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`).catch((e: any) => {
+          if (e?.status === 429) projelerRateLimit = true;
+          return [];
+        }),
+        fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=40&offset=40`).catch((e: any) => {
+          if (e?.status === 429) projelerRateLimit = true;
+          return [];
+        }),
       ]);
       projeler = [...(Array.isArray(p1) ? p1 : []), ...(Array.isArray(p2) ? p2 : [])];
     } catch (_) {}
 
-    // Bireysel proje istatistiklerini çek → remix sayısını doğru al (toplu endpoint remix vermez)
-    if (projeler.length > 0) {
-      const bireyselFetch = await Promise.allSettled(
-        projeler.slice(0, 40).map(p =>
-          fetch(`${SCRATCH_API}/projects/${p.id}`, {
-            headers: { "User-Agent": "ScratchAnalyzer/1.0" }
-          }).then(r => r.ok ? r.json() : null).catch(() => null)
-        )
-      );
-      bireyselFetch.forEach((sonuc, i) => {
-        if (sonuc.status === "fulfilled" && sonuc.value?.stats) {
-          projeler[i].stats = sonuc.value.stats; // gerçek istatistiklerle güncelle
-        }
-      });
-    }
-
     // Not: Scratch API yorum sayısını herkese açık endpoint'te vermez.
-    // total_comments her zaman -1 (API kısıtlı anlamında) olarak işaretlenir.
     const total_comments = -1;
 
     // Takipçi sayısı — ScratchDB ile dene, olmadı paginated fetch
@@ -555,23 +594,24 @@ router.get("/user/:username", async (req, res) => {
     } catch (_) {}
 
     if (!scratchDbOk) {
-      // Sayfalı çekme: 40'tan az gelene kadar devam et, en fazla 20 sayfa (800 takipçi)
+      // Sayfalı çekme: en fazla 5 sayfa (200 takipçi), sayfalar arası 200ms bekleme
       try {
         let offset = 0;
-        while (offset < 800) {
+        while (offset < 200) {
           const page: any[] = await fetchScratch(
             `${SCRATCH_API}/users/${username}/followers?limit=40&offset=${offset}`
           ).catch(() => []);
           if (!Array.isArray(page) || page.length === 0) break;
           followers += page.length;
-          if (page.length < 40) break; // son sayfa
+          if (page.length < 40) break;
           offset += 40;
+          await new Promise(r => setTimeout(r, 200));
         }
       } catch (_) {}
 
       try {
         let offset = 0;
-        while (offset < 400) {
+        while (offset < 200) {
           const page: any[] = await fetchScratch(
             `${SCRATCH_API}/users/${username}/following?limit=40&offset=${offset}`
           ).catch(() => []);
@@ -579,6 +619,7 @@ router.get("/user/:username", async (req, res) => {
           following += page.length;
           if (page.length < 40) break;
           offset += 40;
+          await new Promise(r => setTimeout(r, 200));
         }
       } catch (_) {}
     }
@@ -740,14 +781,80 @@ router.get("/user/:username", async (req, res) => {
         zayif_proje_orani, guclu_proje_orani,
       },
       superlative,
+      data_quality: projelerRateLimit ? "rate_limited" : "complete",
     });
   } catch (err: any) {
     if (err.status === 404) {
       res.status(404).json({ error: "not_found", message: `"${username}" kullanıcısı Scratch'te bulunamadı` });
+    } else if (err.status === 429) {
+      res.status(429).json({ error: "rate_limited", message: "Scratch API şu an çok meşgul. 1-2 dakika bekleyip tekrar dene." });
     } else {
       req.log.error(err, "Scratch kullanıcısı alınırken hata");
-      res.status(500).json({ error: "server_error", message: "Kullanıcı verileri alınamadı" });
+      res.status(500).json({ error: "server_error", message: "Kullanıcı verileri alınamadı. Scratch API geçici olarak yanıt vermiyor olabilir." });
     }
+  }
+});
+
+// Kimlik doğrulamalı yorum istatistikleri — kullanıcı kendi session token'ını verir
+router.get("/user/:username/authenticated-stats", async (req, res) => {
+  const { username } = req.params;
+  const { token } = req.query;
+
+  if (!token || typeof token !== "string" || token.length < 10) {
+    res.status(400).json({ error: "missing_token", message: "Geçersiz oturum token'ı" });
+    return;
+  }
+
+  const authHeaders = {
+    "User-Agent": "ScratchAnalyzer/1.0",
+    "Accept": "application/json",
+    "Cookie": `scratchsessionsid=${token}`,
+    "x-csrftoken": "a",
+    "x-requested-with": "XMLHttpRequest",
+    "Referer": "https://scratch.mit.edu",
+  };
+
+  try {
+    const projeler: any[] = await fetch(
+      `${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`,
+      { headers: authHeaders, signal: AbortSignal.timeout(8000) }
+    ).then(r => r.ok ? r.json() : []).catch(() => []);
+
+    if (!Array.isArray(projeler) || projeler.length === 0) {
+      res.json({ username, total_comments: 0, project_count: 0, authenticated: true });
+      return;
+    }
+
+    // Her proje için kimlik doğrulamalı stats çek → comments sayısını al
+    const sonuclar = await Promise.allSettled(
+      projeler.slice(0, 20).map(p =>
+        fetch(`${SCRATCH_API}/projects/${p.id}`, {
+          headers: authHeaders,
+          signal: AbortSignal.timeout(5000),
+        }).then(r => r.ok ? r.json() : null).catch(() => null)
+      )
+    );
+
+    let total_comments = 0;
+    const proje_yorumlar: Array<{ id: number; title: string; yorumlar: number }> = [];
+
+    sonuclar.forEach((s, i) => {
+      if (s.status === "fulfilled" && s.value?.stats) {
+        const yorum = s.value.stats.comments || 0;
+        total_comments += yorum;
+        proje_yorumlar.push({ id: projeler[i].id, title: projeler[i].title, yorumlar: yorum });
+      }
+    });
+
+    res.json({
+      username,
+      total_comments,
+      project_count: projeler.length,
+      proje_yorumlar: proje_yorumlar.sort((a, b) => b.yorumlar - a.yorumlar),
+      authenticated: true,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "fetch_error", message: "Veriler alınamadı" });
   }
 });
 
