@@ -315,7 +315,6 @@ export default function Dashboard() {
                 { etiket: "Toplam Beğeni", deger: s.total_loves, ikon: Heart, renk: "text-pink-400", arkaplan: "bg-pink-400/10" },
                 { etiket: "Favoriler", deger: s.total_favorites, ikon: Star, renk: "text-yellow-400", arkaplan: "bg-yellow-400/10" },
                 { etiket: "Toplam Remix", deger: s.total_remixes, ikon: Repeat, renk: "text-green-400", arkaplan: "bg-green-400/10" },
-                { etiket: "Alınan Yorumlar", deger: s.total_comments, ikon: MessageSquare, renk: "text-orange-400", arkaplan: "bg-orange-400/10" },
                 { etiket: "Proje/Ay", deger: s.projects_per_month, ikon: TrendingUp, renk: "text-primary", arkaplan: "bg-primary/10", format: "sabit" },
               ].map((stat, i) => (
                 <GlassCard key={i} className="p-3 sm:p-4 hover:bg-white/[0.06] transition-colors">
@@ -330,6 +329,15 @@ export default function Dashboard() {
                   <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">{stat.etiket}</div>
                 </GlassCard>
               ))}
+              {/* Yorumlar - Scratch public API kısıtlı */}
+              <GlassCard className="p-3 sm:p-4 hover:bg-white/[0.06] transition-colors border-orange-500/10">
+                <div className="p-1.5 rounded-lg w-fit mb-2 bg-orange-400/10">
+                  <MessageSquare className="w-4 h-4 text-orange-400" />
+                </div>
+                <div className="text-lg sm:text-2xl font-bold font-display text-orange-400/70">—</div>
+                <div className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">Yorumlar</div>
+                <div className="text-[9px] text-orange-400/60 mt-0.5">API kısıtlı</div>
+              </GlassCard>
             </div>
           </motion.div>
 
@@ -406,21 +414,25 @@ export default function Dashboard() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground">Toplam Yorum</span>
-                    <span className="font-bold text-sm">{s.total_comments.toLocaleString("tr-TR")}</span>
+                    <span className="font-bold text-sm text-orange-400/70 flex items-center gap-1">
+                      <span>Gizli</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">(Scratch API kısıtlı)</span>
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">Proje Başına Yorum</span>
-                    <span className="font-bold text-sm">{s.yorum_orani}</span>
+                    <span className="text-xs text-muted-foreground">Yorum Durumu</span>
+                    <span className="font-bold text-sm text-green-400">
+                      {(analiz.profile as any).comments_allowed !== false ? "✅ Açık" : "🚫 Kapalı"}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-muted-foreground">Aktivite Seviyesi</span>
                     <span className="font-bold text-sm text-accent">{analiz.insights.etkilesim_kalitesi}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground">Yorum/Beğeni Oranı</span>
-                    <span className="font-bold text-sm">
-                      {s.total_loves > 0 ? ((s.total_comments / s.total_loves) * 100).toFixed(1) : 0}%
-                    </span>
+                  <div className="mt-2 p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                    <p className="text-[10px] text-orange-400/80 leading-relaxed">
+                      Scratch, yorum sayısını herkese açık API üzerinden sağlamıyor. Bu Scratch'in bir kısıtlamasıdır, uygulamamızın değil.
+                    </p>
                   </div>
                 </div>
               </GlassCard>

@@ -511,6 +511,22 @@ router.get("/user/:username", async (req, res) => {
       projeler = [...(Array.isArray(p1) ? p1 : []), ...(Array.isArray(p2) ? p2 : [])];
     } catch (_) {}
 
+    // Bireysel proje istatistiklerini çek → remix sayısını doğru al (toplu endpoint remix vermez)
+    if (projeler.length > 0) {
+      const bireyselFetch = await Promise.allSettled(
+        projeler.slice(0, 40).map(p =>
+          fetch(`${SCRATCH_API}/projects/${p.id}`, {
+            headers: { "User-Agent": "ScratchAnalyzer/1.0" }
+          }).then(r => r.ok ? r.json() : null).catch(() => null)
+        )
+      );
+      bireyselFetch.forEach((sonuc, i) => {
+        if (sonuc.status === "fulfilled" && sonuc.value?.stats) {
+          projeler[i].stats = sonuc.value.stats; // gerçek istatistiklerle güncelle
+        }
+      });
+    }
+
     // Not: Scratch API yorum sayısını herkese açık endpoint'te vermez.
     // total_comments her zaman -1 (API kısıtlı anlamında) olarak işaretlenir.
     const total_comments = -1;
@@ -518,30 +534,52 @@ router.get("/user/:username", async (req, res) => {
     // Takipçi sayısı — ScratchDB ile dene, olmadı paginated fetch
     let followers = 0;
     let following = 0;
+
+    // Takipçi: ScratchDB dene → başarısız olursa sayfalı çekme (sayfa sayfa gerçek toplamı bul)
+    let scratchDbOk = false;
     try {
       const dbRes = await fetch(`https://scratchdb.lefty.one/v3/user/info/${username}`, {
-        headers: { "User-Agent": "ScratchAnalyzer/1.0" }
+        headers: { "User-Agent": "ScratchAnalyzer/1.0" },
+        signal: AbortSignal.timeout(3000),
       });
       if (dbRes.ok) {
         const dbData = await dbRes.json() as any;
-        followers = dbData?.statistics?.followers || 0;
-        following = dbData?.statistics?.following || 0;
+        const dbFollowers = dbData?.statistics?.followers || 0;
+        const dbFollowing = dbData?.statistics?.following || 0;
+        if (dbFollowers > 0 || dbFollowing > 0) {
+          followers = dbFollowers;
+          following = dbFollowing;
+          scratchDbOk = true;
+        }
       }
     } catch (_) {}
 
-    if (followers === 0) {
+    if (!scratchDbOk) {
+      // Sayfalı çekme: 40'tan az gelene kadar devam et, en fazla 20 sayfa (800 takipçi)
       try {
-        const pages = await Promise.all([
-          fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=0`).catch(() => []),
-          fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=40`).catch(() => []),
-        ]);
-        followers = (pages[0] as any[]).length + (pages[1] as any[]).length;
+        let offset = 0;
+        while (offset < 800) {
+          const page: any[] = await fetchScratch(
+            `${SCRATCH_API}/users/${username}/followers?limit=40&offset=${offset}`
+          ).catch(() => []);
+          if (!Array.isArray(page) || page.length === 0) break;
+          followers += page.length;
+          if (page.length < 40) break; // son sayfa
+          offset += 40;
+        }
       } catch (_) {}
-    }
-    if (following === 0) {
+
       try {
-        const fl = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40`);
-        following = Array.isArray(fl) ? fl.length : 0;
+        let offset = 0;
+        while (offset < 400) {
+          const page: any[] = await fetchScratch(
+            `${SCRATCH_API}/users/${username}/following?limit=40&offset=${offset}`
+          ).catch(() => []);
+          if (!Array.isArray(page) || page.length === 0) break;
+          following += page.length;
+          if (page.length < 40) break;
+          offset += 40;
+        }
       } catch (_) {}
     }
 
@@ -556,7 +594,8 @@ router.get("/user/:username", async (req, res) => {
     const love_to_view_ratio = total_views > 0 ? total_loves / total_views : 0;
     const remix_rate = total_projects > 0 ? total_remixes / total_projects : 0;
     const takip_orani = following > 0 ? followers / following : followers;
-    const yorum_orani = total_projects > 0 ? total_comments / total_projects : 0;
+    // total_comments = -1 → yorum API'si kısıtlı, hesaplamada 0 olarak kullan
+    const yorum_orani = 0;
 
     const joinDate = profileData.history?.joined || profileData.join_date || new Date().toISOString();
     const daysSinceJoin = Math.floor((Date.now() - new Date(joinDate).getTime()) / (1000 * 60 * 60 * 24));
@@ -567,8 +606,9 @@ router.get("/user/:username", async (req, res) => {
       ? Math.round(((total_views - total_loves) / total_views) * 100 * 10) / 10
       : 100;
 
+    // Yorum API kısıtlı olduğu için etkileşim oranı hesabında yorumu dışarıda tut
     const etkilesim_orani = total_views > 0
-      ? Math.round(((total_loves + total_favorites + total_comments) / total_views) * 100 * 100) / 100
+      ? Math.round(((total_loves + total_favorites) / total_views) * 100 * 100) / 100
       : 0;
 
     const verimlilik_skoru = total_projects > 0
