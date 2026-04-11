@@ -796,69 +796,6 @@ router.get("/user/:username", async (req, res) => {
   }
 });
 
-// Kimlik doğrulamalı yorum istatistikleri — kullanıcı kendi session token'ını verir
-router.get("/user/:username/authenticated-stats", async (req, res) => {
-  const { username } = req.params;
-  const { token } = req.query;
-
-  if (!token || typeof token !== "string" || token.length < 10) {
-    res.status(400).json({ error: "missing_token", message: "Geçersiz oturum token'ı" });
-    return;
-  }
-
-  const authHeaders = {
-    "User-Agent": "ScratchAnalyzer/1.0",
-    "Accept": "application/json",
-    "Cookie": `scratchsessionsid=${token}`,
-    "x-csrftoken": "a",
-    "x-requested-with": "XMLHttpRequest",
-    "Referer": "https://scratch.mit.edu",
-  };
-
-  try {
-    const projeler = (await fetch(
-      `${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`,
-      { headers: authHeaders, signal: AbortSignal.timeout(8000) }
-    ).then(r => r.ok ? r.json() : []).catch(() => [])) as any[];
-
-    if (!Array.isArray(projeler) || projeler.length === 0) {
-      res.json({ username, total_comments: 0, project_count: 0, authenticated: true });
-      return;
-    }
-
-    // Her proje için kimlik doğrulamalı stats çek → comments sayısını al
-    const sonuclar = await Promise.allSettled(
-      projeler.slice(0, 20).map((p: any) =>
-        fetch(`${SCRATCH_API}/projects/${p.id}`, {
-          headers: authHeaders,
-          signal: AbortSignal.timeout(5000),
-        }).then(r => r.ok ? r.json() : null).catch(() => null)
-      )
-    );
-
-    let total_comments = 0;
-    const proje_yorumlar: Array<{ id: number; title: string; yorumlar: number }> = [];
-
-    sonuclar.forEach((s, i) => {
-      if (s.status === "fulfilled" && (s.value as any)?.stats) {
-        const yorum = (s.value as any).stats.comments || 0;
-        total_comments += yorum;
-        proje_yorumlar.push({ id: projeler[i].id, title: projeler[i].title, yorumlar: yorum });
-      }
-    });
-
-    res.json({
-      username,
-      total_comments,
-      project_count: projeler.length,
-      proje_yorumlar: proje_yorumlar.sort((a, b) => b.yorumlar - a.yorumlar),
-      authenticated: true,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: "fetch_error", message: "Veriler alınamadı" });
-  }
-});
-
 router.get("/user/:username/projects", async (req, res) => {
   const { username } = req.params;
   const limit = Math.min(40, Number(req.query.limit) || 20);
