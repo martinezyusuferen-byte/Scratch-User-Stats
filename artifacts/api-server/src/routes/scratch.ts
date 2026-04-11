@@ -796,6 +796,69 @@ router.get("/user/:username", async (req, res) => {
   }
 });
 
+router.get("/project/:id", async (req, res) => {
+  const { id } = req.params;
+  const cacheKey = `project:${id}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    const proje = await fetchScratch(`${SCRATCH_API}/projects/${id}`);
+    const creator = proje.author?.username || proje.username || "";
+
+    let otherProjects: any[] = [];
+    if (creator) {
+      try {
+        const others = await fetchScratch(`${SCRATCH_API}/users/${creator}/projects?limit=24&offset=0`);
+        otherProjects = Array.isArray(others)
+          ? others
+              .filter((p: any) => String(p.id) !== String(id))
+              .sort((a: any, b: any) => (b.stats?.views || 0) - (a.stats?.views || 0))
+              .slice(0, 12)
+              .map(mapProject)
+          : [];
+      } catch (_) {}
+    }
+
+    const result = {
+      id: proje.id,
+      title: proje.title || "Başlıksız Proje",
+      description: proje.description || "",
+      instructions: proje.instructions || "",
+      notes: proje.notes || "",
+      thumbnail_url: proje.image || `${SCRATCH_CDN}/projects/${id}/thumbnail`,
+      embed_url: `https://scratch.mit.edu/projects/${id}/embed`,
+      scratch_url: `https://scratch.mit.edu/projects/${id}`,
+      loves: proje.stats?.loves || 0,
+      favorites: proje.stats?.favorites || 0,
+      views: proje.stats?.views || 0,
+      remixes: proje.stats?.remixes || 0,
+      comments: proje.stats?.comments || 0,
+      created: proje.history?.created || "",
+      modified: proje.history?.modified || "",
+      share_date: proje.history?.shared || "",
+      creator: {
+        username: creator,
+        avatar_url: proje.author?.profile?.images?.["90x90"] ||
+          `https://cdn2.scratch.mit.edu/get_image/user/${proje.author?.id}_60x60.png`,
+        id: proje.author?.id || 0,
+      },
+      other_projects: otherProjects,
+    };
+
+    cacheSet(cacheKey, result);
+    res.json(result);
+  } catch (err: any) {
+    if (err.status === 404) {
+      res.status(404).json({ error: "not_found", message: `Proje ${id} bulunamadı` });
+    } else if (err.status === 429) {
+      res.status(429).json({ error: "rate_limited", message: "Scratch API şu an çok meşgul." });
+    } else {
+      res.status(500).json({ error: "server_error", message: "Proje verisi alınamadı." });
+    }
+  }
+});
+
 router.get("/user/:username/projects", async (req, res) => {
   const { username } = req.params;
   const limit = Math.min(40, Number(req.query.limit) || 20);

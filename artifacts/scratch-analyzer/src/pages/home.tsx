@@ -1,12 +1,19 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Search, BarChart2, Target, TrendingUp, Users, Zap, Star } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Search, BarChart2, Target, TrendingUp, Users, Zap, Star, ArrowRight } from "lucide-react";
 
 const ornekKullanicilar = ["griffpatch", "Will_Wam", "ceebee", "ScratchCat"];
 
 export default function Home() {
   const [, setLocation] = useLocation();
+  const [aramaInput, setAramaInput] = useState("");
+
+  const handleArama = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = aramaInput.trim();
+    if (val) setLocation(`/kullanici/${encodeURIComponent(val)}`);
+  };
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden">
@@ -24,7 +31,7 @@ export default function Home() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
-          className="text-center mb-10"
+          className="text-center mb-8"
         >
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md mb-6">
             <Zap className="w-4 h-4 text-primary" />
@@ -39,11 +46,41 @@ export default function Home() {
           </p>
         </motion.div>
 
+        {/* Arama Çubuğu */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="w-full max-w-2xl mb-5"
+        >
+          <form onSubmit={handleArama} className="relative group">
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-primary/40 via-accent/40 to-primary/40 blur-xl opacity-0 group-focus-within:opacity-60 transition-opacity duration-500" />
+            <div className="relative flex items-center bg-white/[0.06] border border-white/10 focus-within:border-primary/60 rounded-2xl px-5 py-4 transition-all duration-300 backdrop-blur-xl">
+              <Search className="w-5 h-5 text-muted-foreground mr-3 shrink-0 group-focus-within:text-primary transition-colors" />
+              <input
+                type="text"
+                value={aramaInput}
+                onChange={(e) => setAramaInput(e.target.value)}
+                placeholder="Scratch kullanıcı adı gir..."
+                className="flex-1 bg-transparent border-none outline-none text-base text-white placeholder:text-white/30"
+                autoComplete="off"
+              />
+              <button
+                type="submit"
+                disabled={!aramaInput.trim()}
+                className="ml-3 px-4 py-2 rounded-xl bg-primary hover:bg-primary/80 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold transition-all flex items-center gap-1.5 shrink-0"
+              >
+                Analiz Et <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </form>
+        </motion.div>
+
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.5 }}
-          className="mt-5 flex flex-wrap items-center gap-2 justify-center"
+          className="flex flex-wrap items-center gap-2 justify-center mb-4"
         >
           <span className="text-xs text-muted-foreground">Örnek:</span>
           {ornekKullanicilar.map((k) => (

@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
+import ProjeDetay from "@/pages/project";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +21,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/kullanici/:username" component={Dashboard} />
       <Route path="/user/:username" component={Dashboard} />
+      <Route path="/proje/:id" component={ProjeDetay} />
+      <Route path="/project/:id" component={ProjeDetay} />
       <Route component={() => (
         <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
