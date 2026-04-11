@@ -36,13 +36,14 @@ async function doFetch(url: string): Promise<any> {
   const data = await res.json();
   // Scratch bazen HTTP 200 ile rate limit mesajı döndürür: {"response":"Too many requests"}
   if (data && typeof data === "object" && !Array.isArray(data) && "response" in data) {
-    const errStatus = String(data.response).toLowerCase().includes("not found") ? 404 : 429;
+    const responseText = String(data.response);
+    const errStatus = responseText.toLowerCase().includes("not found") ? 404 : 429;
     const err = new Error(`Scratch API: ${data.response}`);
     (err as any).status = errStatus;
     throw err;
   }
   // Scratch 200 ile 404: {"code":"NotFound"}
-  if (data && typeof data === "object" && !Array.isArray(data) && data.code === "NotFound") {
+  if (data && typeof data === "object" && !Array.isArray(data) && (data as any).code === "NotFound") {
     const err = new Error("Scratch: NotFound");
     (err as any).status = 404;
     throw err;
@@ -815,10 +816,10 @@ router.get("/user/:username/authenticated-stats", async (req, res) => {
   };
 
   try {
-    const projeler: any[] = await fetch(
+    const projeler = (await fetch(
       `${SCRATCH_API}/users/${username}/projects?limit=40&offset=0`,
       { headers: authHeaders, signal: AbortSignal.timeout(8000) }
-    ).then(r => r.ok ? r.json() : []).catch(() => []);
+    ).then(r => r.ok ? r.json() : []).catch(() => [])) as any[];
 
     if (!Array.isArray(projeler) || projeler.length === 0) {
       res.json({ username, total_comments: 0, project_count: 0, authenticated: true });
@@ -827,7 +828,7 @@ router.get("/user/:username/authenticated-stats", async (req, res) => {
 
     // Her proje için kimlik doğrulamalı stats çek → comments sayısını al
     const sonuclar = await Promise.allSettled(
-      projeler.slice(0, 20).map(p =>
+      projeler.slice(0, 20).map((p: any) =>
         fetch(`${SCRATCH_API}/projects/${p.id}`, {
           headers: authHeaders,
           signal: AbortSignal.timeout(5000),
@@ -839,8 +840,8 @@ router.get("/user/:username/authenticated-stats", async (req, res) => {
     const proje_yorumlar: Array<{ id: number; title: string; yorumlar: number }> = [];
 
     sonuclar.forEach((s, i) => {
-      if (s.status === "fulfilled" && s.value?.stats) {
-        const yorum = s.value.stats.comments || 0;
+      if (s.status === "fulfilled" && (s.value as any)?.stats) {
+        const yorum = (s.value as any).stats.comments || 0;
         total_comments += yorum;
         proje_yorumlar.push({ id: projeler[i].id, title: projeler[i].title, yorumlar: yorum });
       }
