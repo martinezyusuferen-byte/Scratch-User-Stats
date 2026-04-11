@@ -368,6 +368,66 @@ export default function Dashboard() {
                 </div>
               </div>
             </GlassCard>
+          {/* YouTube Studio tarzı üst özet */}
+          <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Bugünkü Görüntüleme", value: s.total_views, change: "+12%", tone: "text-blue-400", bar: "from-blue-500 to-cyan-400" },
+              { label: "Son Proje", value: "Viral", change: "Trend", tone: "text-pink-400", bar: "from-pink-500 to-orange-400" },
+              { label: "Toplam Etkileşim", value: `%${s.etkilesim_orani}`, change: "Güçlü", tone: "text-emerald-400", bar: "from-emerald-500 to-green-400" },
+              { label: "İçerik Hızı", value: adv.hesap_yaslanma_hizi, change: "Aktif", tone: "text-purple-400", bar: "from-purple-500 to-fuchsia-400" },
+            ].map((card, i) => (
+              <GlassCard key={i} className="p-4 sm:p-5 overflow-hidden relative">
+                <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${card.bar}`} />
+                <div className="text-xs text-muted-foreground">{card.label}</div>
+                <div className={cn("mt-2 text-2xl sm:text-3xl font-display font-bold", card.tone)}>{card.value}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{card.change}</div>
+              </GlassCard>
+            ))}
+          </motion.div>
+
+          <motion.div variants={item} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <GlassCard className="lg:col-span-2 p-5 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-display font-bold text-lg">Son proje performansı</h3>
+                  <p className="text-sm text-muted-foreground">Öne çıkan proje ve momentum özeti</p>
+                </div>
+                <span className="px-3 py-1 rounded-full bg-primary/15 text-primary text-xs font-semibold">Viral</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  { label: "Trend", value: "Yükselişte" },
+                  { label: "Beğeni Hızı", value: "Hızlı" },
+                  { label: "Topluluk", value: "Güçlü" },
+                ].map((x, i) => (
+                  <div key={i} className="rounded-2xl bg-white/5 border border-white/10 p-4">
+                    <div className="text-xs text-muted-foreground">{x.label}</div>
+                    <div className="mt-2 text-base font-semibold">{x.value}</div>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+
+            <GlassCard className="p-5 sm:p-6">
+              <h3 className="font-display font-bold text-lg mb-4">Kanal Durumu</h3>
+              <div className="space-y-4">
+                {[
+                  { label: "Aktiflik", value: "Yüksek", pct: 82 },
+                  { label: "Büyüme", value: "İyi", pct: 69 },
+                  { label: "İçerik Kalitesi", value: "Güçlü", pct: 88 },
+                ].map((x, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-muted-foreground">{x.label}</span>
+                      <span className="font-semibold">{x.value}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${x.pct}%` }} transition={{ duration: 1 }} className="h-full bg-gradient-to-r from-primary to-accent rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
           </motion.div>
 
           {/* ── İSTATİSTİK IZGARASI ── */}
@@ -1339,7 +1399,7 @@ export default function Dashboard() {
               </div>
             </GlassCard>
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </div>
   );
