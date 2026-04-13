@@ -1190,8 +1190,12 @@ export default function Dashboard() {
               </div>
             ) : projelerData?.projects && projelerData.projects.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {projelerData.projects.map((proje) => (
-                  <div key={proje.id} className="group block cursor-pointer" onClick={() => setLocation(`/proje/${proje.id}`)}>
+                {projelerData.projects.map((proje) => {
+                  const atilmaSaati = proje.share_date
+                    ? new Date(proje.share_date).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+                    : "";
+                  return (
+                    <div key={proje.id} className="group block cursor-pointer" onClick={() => setLocation(`/proje/${proje.id}`)}>
                     <GlassCard className="overflow-hidden h-full hover:border-primary/50 transition-all duration-300 flex flex-col group-hover:-translate-y-1">
                       <div className="aspect-video relative bg-black/50 w-full overflow-hidden">
                         {proje.thumbnail_url ? (
@@ -1204,6 +1208,7 @@ export default function Dashboard() {
                         )}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
                           <span className="text-xs font-bold text-primary">Platformda Oynat →</span>
+                          {atilmaSaati && <span className="text-[10px] text-white/70 bg-black/40 px-2 py-1 rounded-full">Saat {atilmaSaati}</span>}
                         </div>
                       </div>
                       <div className="p-3 sm:p-4 flex-1 flex flex-col">
@@ -1215,8 +1220,9 @@ export default function Dashboard() {
                         </div>
                       </div>
                     </GlassCard>
-                  </div>
-                ))}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <GlassCard className="p-8 text-center text-muted-foreground">Bu kullanıcıya ait proje bulunamadı.</GlassCard>

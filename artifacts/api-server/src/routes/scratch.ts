@@ -873,7 +873,13 @@ router.get("/user/:username/projects", async (req, res) => {
       return;
     }
 
-    res.json({ username, projects: projeler.map(mapProject), total: projeler.length });
+    res.json({
+      username,
+      projects: projeler
+        .map(mapProject)
+        .sort((a: any, b: any) => new Date(b.share_date || b.created || 0).getTime() - new Date(a.share_date || a.created || 0).getTime()),
+      total: projeler.length,
+    });
   } catch (err: any) {
     if (err.status === 404) {
       res.status(404).json({ error: "not_found", message: `"${username}" bulunamadı` });
