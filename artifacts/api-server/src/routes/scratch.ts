@@ -796,6 +796,43 @@ router.get("/user/:username", async (req, res) => {
   }
 });
 
+router.get("/search", async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (!q) { res.json({ q, results: [] }); return; }
+
+  const cacheKey = `search:${q.toLowerCase()}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    const data = await fetch(
+      `${SCRATCH_API}/search/projects?q=${encodeURIComponent(q)}&mode=popular&limit=16&offset=0`,
+      { headers: { "User-Agent": "ScratchAnalyzer/1.0", Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+    ).then(r => r.json()).catch(() => []);
+
+    const results = Array.isArray(data)
+      ? data.map((p: any) => ({
+          id: p.id,
+          title: p.title || "Başlıksız",
+          thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+          loves: p.stats?.loves || 0,
+          views: p.stats?.views || 0,
+          favorites: p.stats?.favorites || 0,
+          creator: p.author?.username || "",
+          creator_avatar: p.author?.profile?.images?.["60x60"] || "",
+          share_date: p.history?.shared || "",
+          url: `https://scratch.mit.edu/projects/${p.id}`,
+        }))
+      : [];
+
+    const payload = { q, results };
+    cacheSet(cacheKey, payload);
+    res.json(payload);
+  } catch (_) {
+    res.json({ q, results: [] });
+  }
+});
+
 router.get("/project/:id", async (req, res) => {
   const { id } = req.params;
   const cacheKey = `project:${id}`;
