@@ -796,6 +796,90 @@ router.get("/user/:username", async (req, res) => {
   }
 });
 
+router.get("/popular", async (req, res) => {
+  const mode = String(req.query.mode || "popular");
+  const offset = Number(req.query.offset || 0);
+  const limit = Math.min(24, Number(req.query.limit || 20));
+  const cacheKey = `popular:${mode}:${offset}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+  const mapPopular = (p: any) => ({
+    id: p.id,
+    title: p.title || "Başlıksız",
+    thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+    loves: p.stats?.loves || 0,
+    views: p.stats?.views || 0,
+    favorites: p.stats?.favorites || 0,
+    creator: p.author?.username || "",
+    creator_avatar: p.author?.profile?.images?.["60x60"] || "",
+    share_date: p.history?.shared || "",
+  });
+
+  const hdrs = { "User-Agent": "ScratchAnalyzer/1.0", Accept: "application/json" };
+
+  try {
+    // Primary: explore endpoint
+    const exploreRes = await fetch(
+      `${SCRATCH_API}/explore/projects?limit=${limit}&offset=${offset}&language=&mode=${mode}`,
+      { headers: hdrs, signal: AbortSignal.timeout(7000) }
+    );
+    if (exploreRes.ok) {
+      const data = await exploreRes.json().catch(() => []);
+      if (Array.isArray(data) && data.length > 0) {
+        const results = data.map(mapPopular);
+        const payload = { results };
+        cacheSet(cacheKey, payload);
+        res.json(payload);
+        return;
+      }
+    }
+    // Fallback A: search with popular queries
+    const searchMode = mode === "new" ? "recent" : mode;
+    const queries = ["game", "platformer", "animation", "music", "art", "minecraft", "among us"];
+    const q = queries[Math.floor(Math.random() * queries.length)];
+    const searchRes = await fetch(
+      `${SCRATCH_API}/search/projects?q=${encodeURIComponent(q)}&mode=${searchMode}&limit=${limit}&offset=${offset}&language=`,
+      { headers: hdrs, signal: AbortSignal.timeout(7000) }
+    );
+    if (searchRes.ok) {
+      const fallbackData = await searchRes.json().catch(() => []);
+      const results = Array.isArray(fallbackData) ? fallbackData.map(mapPopular) : [];
+      if (results.length > 0) {
+        const payload = { results };
+        cacheSet(cacheKey, payload);
+        res.json(payload);
+        return;
+      }
+    }
+    // Fallback B: proxy/featured
+    const featuredRes = await fetch(`${SCRATCH_API}/proxy/featured`, { headers: hdrs, signal: AbortSignal.timeout(6000) });
+    if (featuredRes.ok) {
+      const fd = await featuredRes.json().catch(() => ({}));
+      const featured = fd?.community_most_loved_projects || fd?.community_featured_projects || fd?.curator_top_projects || [];
+      if (Array.isArray(featured) && featured.length > 0) {
+        const results = featured.map((p: any) => ({
+          id: p.id,
+          title: p.title || "Başlıksız",
+          thumbnail_url: p.thumbnail_url || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+          loves: p.love_count || 0,
+          views: p.view_count || 0,
+          favorites: p.favorite_count || 0,
+          creator: p.creator || "",
+          creator_avatar: "",
+          share_date: "",
+        }));
+        const payload = { results };
+        cacheSet(cacheKey, payload);
+        res.json(payload);
+        return;
+      }
+    }
+    res.json({ results: [] });
+  } catch (_) {
+    res.json({ results: [] });
+  }
+});
+
 router.get("/search", async (req, res) => {
   const q = String(req.query.q || "").trim();
   if (!q) { res.json({ q, results: [] }); return; }
