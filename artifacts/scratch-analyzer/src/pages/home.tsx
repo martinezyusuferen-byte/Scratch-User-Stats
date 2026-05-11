@@ -12,20 +12,68 @@ const ornekKullanicilar = ["griffpatch", "Will_Wam", "ceebee", "ScratchCat"];
 
 // ─── İlgi Takip Algoritması ───────────────────────────────────────────────────
 const INTEREST_KEY = "ss_flick_interests";
+const CATEGORY_KEY = "ss_flick_categories";
+const SESSION_KEY = "ss_flick_session";
+
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  "oyun":       ["game","platformer","rpg","clicker","quiz","escape","battle","fight","run","jump","shooter","racing","puzzle"],
+  "animasyon":  ["animation","animate","story","film","movie","cartoon","series","episode"],
+  "müzik":      ["music","song","piano","beat","drum","melody","sound","remix","band","concert"],
+  "sanat":      ["art","drawing","pixel","paint","draw","design","sketch","color","portrait"],
+  "simülasyon": ["simulator","simulation","physics","engine","sandbox","sandbox","life","city","world"],
+  "eğitim":     ["tutorial","learn","teach","school","math","science","code","lesson","guide","how to"],
+};
 
 function loadInterests(): Record<string, number> {
-  try { return JSON.parse(localStorage.getItem(INTEREST_KEY) || "{}"); }
-  catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(INTEREST_KEY) || "{}"); } catch { return {}; }
 }
 function addInterest(creator: string, delta: number) {
   const d = loadInterests();
-  d[creator] = Math.min(999, (d[creator] || 0) + delta);
+  d[creator] = Math.min(9999, (d[creator] || 0) + delta);
   try { localStorage.setItem(INTEREST_KEY, JSON.stringify(d)); } catch {}
+}
+function inferCategory(title: string): string | null {
+  const t = title.toLowerCase();
+  for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (kws.some(k => t.includes(k))) return cat;
+  }
+  return null;
+}
+function loadCategories(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(CATEGORY_KEY) || "{}"); } catch { return {}; }
+}
+function addCategoryInterest(title: string, delta: number) {
+  const cat = inferCategory(title);
+  if (!cat) return;
+  const d = loadCategories();
+  d[cat] = Math.min(9999, (d[cat] || 0) + delta);
+  try { localStorage.setItem(CATEGORY_KEY, JSON.stringify(d)); } catch {}
+}
+function topCategory(): string | null {
+  const d = loadCategories();
+  const top = Object.entries(d).sort((a, b) => b[1] - a[1])[0];
+  return top ? top[0] : null;
+}
+function addSessionTime(delta: number) {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY) || "{}";
+    const d = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0, 10);
+    d[today] = (d[today] || 0) + delta;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(d));
+  } catch {}
 }
 function getPersonalized(projects: any[]): any[] {
   const d = loadInterests();
-  if (!Object.keys(d).length) return projects;
-  return [...projects].sort((a, b) => (d[b.creator] || 0) - (d[a.creator] || 0));
+  const cats = loadCategories();
+  if (!Object.keys(d).length && !Object.keys(cats).length) return projects;
+  return [...projects].sort((a, b) => {
+    const catA = inferCategory(a.title || "");
+    const catB = inferCategory(b.title || "");
+    const scoreA = (d[a.creator] || 0) + (catA ? (cats[catA] || 0) * 0.5 : 0);
+    const scoreB = (d[b.creator] || 0) + (catB ? (cats[catB] || 0) * 0.5 : 0);
+    return scoreB - scoreA;
+  });
 }
 function topCreator(): string | null {
   const d = loadInterests();
@@ -95,6 +143,8 @@ function FlasPlayer({
 }) {
   const [index, setIndex] = useState(startIndex);
   const [playing, setPlaying] = useState(false);
+  const [autoSec, setAutoSec] = useState(0);   // 0-30, resets on nav
+  const AUTO_ADVANCE = 30;
   const timeRef = useRef(Date.now());
   const touchY = useRef(0);
   const [, setLocation] = useLocation();
@@ -104,7 +154,11 @@ function FlasPlayer({
   const flush = useCallback(() => {
     if (!proje) return;
     const secs = Math.floor((Date.now() - timeRef.current) / 1000);
-    if (secs > 0) onInterest(proje.creator, secs);
+    if (secs > 0) {
+      onInterest(proje.creator, secs);
+      addCategoryInterest(proje.title || "", secs);
+      addSessionTime(secs);
+    }
     timeRef.current = Date.now();
   }, [proje, onInterest]);
 
@@ -113,6 +167,7 @@ function FlasPlayer({
     flush();
     setIndex(i => i + 1);
     setPlaying(false);
+    setAutoSec(0);
   }, [index, projects.length, flush]);
 
   const goPrev = useCallback(() => {
@@ -120,7 +175,31 @@ function FlasPlayer({
     flush();
     setIndex(i => i - 1);
     setPlaying(false);
+    setAutoSec(0);
   }, [index, flush]);
+
+  // Auto-advance timer — 1 tick/sn, reset on index change
+  useEffect(() => {
+    if (playing) return; // iframe oynuyor, otomatik ilerleme yok
+    setAutoSec(0);
+    const id = setInterval(() => {
+      setAutoSec(prev => {
+        if (prev >= AUTO_ADVANCE - 1) {
+          clearInterval(id);
+          return AUTO_ADVANCE;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [index, playing]);
+
+  // Auto-advance tetikle
+  useEffect(() => {
+    if (autoSec >= AUTO_ADVANCE && index < projects.length - 1) {
+      goNext();
+    }
+  }, [autoSec, index, projects.length, goNext]);
 
   useEffect(() => {
     const kb = (e: KeyboardEvent) => {
@@ -253,8 +332,22 @@ function FlasPlayer({
                   </div>
                 </div>
 
-                {/* Progress dots */}
-                <div className="absolute top-3 left-0 right-0 flex justify-center gap-1 px-4">
+                {/* Auto-advance progress bar */}
+                {!playing && (
+                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/10">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${(autoSec / AUTO_ADVANCE) * 100}%`,
+                        background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))",
+                      }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                )}
+
+                {/* Progress dots + "sıradaki" hint */}
+                <div className="absolute top-3 left-0 right-0 flex items-center justify-center gap-1 px-4">
                   {projects.slice(Math.max(0, index - 2), Math.min(projects.length, index + 3)).map((_, relI) => {
                     const absI = Math.max(0, index - 2) + relI;
                     return (
@@ -262,6 +355,22 @@ function FlasPlayer({
                     );
                   })}
                 </div>
+
+                {/* "Sıradaki" uyarısı — son 5 saniyede belir */}
+                <AnimatePresence>
+                  {!playing && autoSec >= AUTO_ADVANCE - 5 && index < projects.length - 1 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-full text-xs font-bold text-white backdrop-blur-md flex items-center gap-2"
+                      style={{ background: "rgba(0,0,0,0.7)", border: "1px solid rgba(255,255,255,0.15)" }}
+                    >
+                      <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 0.8, repeat: Infinity }}>⏭</motion.span>
+                      {AUTO_ADVANCE - autoSec}s sonra sıradaki
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </div>
@@ -695,7 +804,6 @@ export default function Home() {
                 <Zap className="w-5 h-5 text-primary" />
               </motion.div>
               <h2 className="font-display font-bold text-lg text-white">Flaş</h2>
-              <span className="text-[11px] text-white/40 mt-0.5">Hızlı Keşif</span>
             </div>
 
             <div className="flex items-center gap-1 ml-auto flex-wrap">
@@ -721,17 +829,20 @@ export default function Home() {
             </div>
           </div>
 
-          {/* İlgi analizi mini widget */}
+          {/* İlgi analizi mini widget — sessiz arka plan verisi */}
           {totalSec > 5 && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               className="mb-4 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.07]"
             >
-              <Brain className="w-4 h-4 text-accent shrink-0" />
+              <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}>
+                <Brain className="w-4 h-4 text-accent shrink-0" />
+              </motion.div>
               <div className="text-xs text-white/50 flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                <span>{totalSec} saniye toplam izleme</span>
-                {top && <span>En sevdiğin: <span className="text-accent font-semibold">@{top}</span></span>}
+                <span>{totalSec} sn izleme</span>
+                {top && <span>En sevdiğin yapımcı: <span className="text-accent font-semibold">@{top}</span></span>}
+                {(() => { const cat = topCategory(); return cat ? <span>En sevdiğin konu: <span className="text-primary font-semibold">{cat}</span></span> : null; })()}
               </div>
             </motion.div>
           )}
