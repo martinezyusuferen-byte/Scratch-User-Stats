@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, BarChart2, Target, TrendingUp, Users, Zap, Star,
   ArrowRight, Heart, Eye, Play, X, Loader2, User, Gamepad2,
-  ChevronUp, ChevronDown, Flame, Clock, Sparkles, Brain,
+  ChevronUp, ChevronDown, Flame, Clock, Sparkles,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -134,31 +134,41 @@ function Particles() {
 
 // ─── Flaş Oynatıcı (Tam Ekran Modal) ─────────────────────────────────────────
 function FlasPlayer({
-  projects, startIndex, onClose, onInterest,
+  projects, startIndex, onClose, onInterest, onNearEnd,
 }: {
   projects: any[];
   startIndex: number;
   onClose: () => void;
   onInterest: (creator: string, delta: number) => void;
+  onNearEnd: () => void;
 }) {
   const [index, setIndex] = useState(startIndex);
   const [playing, setPlaying] = useState(false);
-  const [autoSec, setAutoSec] = useState(0);   // 0-30, resets on nav
+  const [autoSec, setAutoSec] = useState(0);
   const AUTO_ADVANCE = 30;
   const timeRef = useRef(Date.now());
+  const nearEndFired = useRef(false);
   const touchY = useRef(0);
   const [, setLocation] = useLocation();
 
   const proje = projects[index];
 
+  // TikTok tamamlama oranı skoru — kullanıcı görmez, arka planda çalışır
   const flush = useCallback(() => {
     if (!proje) return;
     const secs = Math.floor((Date.now() - timeRef.current) / 1000);
-    if (secs > 0) {
-      onInterest(proje.creator, secs);
-      addCategoryInterest(proje.title || "", secs);
-      addSessionTime(secs);
+    const pct = secs / AUTO_ADVANCE;
+    // Tamamlama oranına göre ağırlıklı skor (TikTok havuz mantığı)
+    let score = 0;
+    if (secs < 3)       score = -1;  // hızlı atlama → negatif sinyal
+    else if (pct < 0.4) score = 1;   // kısa izleme → zayıf ilgi
+    else if (pct < 0.7) score = 3;   // yarıdan fazla → ilgi var
+    else                score = 6;   // neredeyse/tam tamamlama → güçlü ilgi
+    if (score !== 0) {
+      onInterest(proje.creator, score);
+      addCategoryInterest(proje.title || "", score);
     }
+    addSessionTime(Math.max(0, secs));
     timeRef.current = Date.now();
   }, [proje, onInterest]);
 
@@ -177,6 +187,14 @@ function FlasPlayer({
     setPlaying(false);
     setAutoSec(0);
   }, [index, flush]);
+
+  // Sessiz "daha fazla yükle" — listenin sonuna yaklaşınca tetikle
+  useEffect(() => {
+    if (!nearEndFired.current && index >= projects.length - 4) {
+      nearEndFired.current = true;
+      onNearEnd();
+    }
+  }, [index, projects.length, onNearEnd]);
 
   // Auto-advance timer — 1 tick/sn, reset on index change
   useEffect(() => {
@@ -499,32 +517,70 @@ export default function Home() {
   const [flashMod, setFlashMod] = useState<FlasMode>("popular");
   const [flashPersonel, setFlashPersonel] = useState(false);
   const [aciKart, setAciKart] = useState<number | null>(null);
-  const [interests, setInterests] = useState<Record<string, number>>(loadInterests);
+  const loadingMore = useRef(false);
+  const seenIds = useRef<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const refreshInterests = useCallback(() => {
-    setInterests(loadInterests());
-  }, []);
 
   const handleInterest = useCallback((creator: string, delta: number) => {
     addInterest(creator, delta);
-    refreshInterests();
-  }, [refreshInterests]);
+  }, []);
 
-  // Popüler projeleri yükle
+  // İlk yükleme + mod/personel değişiminde sıfırla
   useEffect(() => {
     setFlashYukleniyor(true);
+    seenIds.current.clear();
     const modeMap: Record<FlasMode, string> = { popular: "popular", trending: "trending", new: "recent" };
     fetch(`${BASE}/api/scratch/popular?mode=${modeMap[flashMod]}&limit=20`)
       .then(r => r.json())
       .then(d => {
-        let projs = d.results || [];
+        let projs: any[] = d.results || [];
+        projs.forEach((p: any) => seenIds.current.add(p.id));
         if (flashPersonel) projs = getPersonalized(projs);
         setFlashProjeler(projs);
       })
       .catch(() => setFlashProjeler([]))
       .finally(() => setFlashYukleniyor(false));
   }, [flashMod, flashPersonel]);
+
+  // Sessiz arka plan yükleme — TikTok "sonraki havuz" mantığı
+  const loadMore = useCallback(() => {
+    if (loadingMore.current) return;
+    loadingMore.current = true;
+    // Kategori ilgisine göre sorgu seç
+    const cats = loadCategories();
+    const topCat = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
+    const catQueryMap: Record<string, string> = {
+      oyun: "game platformer", animasyon: "animation story", müzik: "music song",
+      sanat: "art drawing", simülasyon: "simulator", eğitim: "tutorial learn",
+    };
+    const fallbackQueries = ["game", "animation", "art", "music", "platformer", "minecraft"];
+    const q = topCat ? (catQueryMap[topCat[0]] || topCat[0]) : fallbackQueries[Math.floor(Math.random() * fallbackQueries.length)];
+    const offset = Math.floor(Math.random() * 60); // rastgele sayfa → taze içerik
+    fetch(`${BASE}/api/scratch/popular?mode=popular&limit=15&offset=${offset}`)
+      .then(r => r.json())
+      .then(d => {
+        const fresh = (d.results || []).filter((p: any) => !seenIds.current.has(p.id));
+        fresh.forEach((p: any) => seenIds.current.add(p.id));
+        if (fresh.length === 0) {
+          // offset farklı deneme — search ile fallback
+          return fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(q)}`);
+        }
+        setFlashProjeler(prev => {
+          const sorted = getPersonalized(fresh);
+          return [...prev, ...sorted];
+        });
+      })
+      .then(res => {
+        if (!res) return;
+        return (res as Response).json().then((d: any) => {
+          const fresh = (d.results || []).filter((p: any) => !seenIds.current.has(p.id));
+          fresh.forEach((p: any) => seenIds.current.add(p.id));
+          setFlashProjeler(prev => [...prev, ...getPersonalized(fresh)]);
+        });
+      })
+      .catch(() => {})
+      .finally(() => { loadingMore.current = false; });
+  }, []);
 
   const temizle = () => {
     setDurum("bos");
@@ -553,9 +609,6 @@ export default function Home() {
       setDurum("hata");
     }
   };
-
-  const top = topCreator();
-  const totalSec = totalWatchSeconds();
 
   const flashModListe: { key: FlasMode; label: string; icon: any }[] = [
     { key: "popular", label: "Popüler", icon: Flame },
@@ -829,23 +882,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* İlgi analizi mini widget — sessiz arka plan verisi */}
-          {totalSec > 5 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="mb-4 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.07]"
-            >
-              <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 2, repeat: Infinity }}>
-                <Brain className="w-4 h-4 text-accent shrink-0" />
-              </motion.div>
-              <div className="text-xs text-white/50 flex flex-wrap items-center gap-x-4 gap-y-0.5">
-                <span>{totalSec} sn izleme</span>
-                {top && <span>En sevdiğin yapımcı: <span className="text-accent font-semibold">@{top}</span></span>}
-                {(() => { const cat = topCategory(); return cat ? <span>En sevdiğin konu: <span className="text-primary font-semibold">{cat}</span></span> : null; })()}
-              </div>
-            </motion.div>
-          )}
 
           {/* Kartlar — yatay kaydırma */}
           {flashYukleniyor ? (
@@ -927,8 +963,9 @@ export default function Home() {
           <FlasPlayer
             projects={flashProjeler}
             startIndex={aciKart}
-            onClose={() => { setAciKart(null); refreshInterests(); }}
+            onClose={() => setAciKart(null)}
             onInterest={handleInterest}
+            onNearEnd={loadMore}
           />
         )}
       </AnimatePresence>
