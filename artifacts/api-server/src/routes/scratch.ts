@@ -884,13 +884,17 @@ router.get("/search", async (req, res) => {
   const q = String(req.query.q || "").trim();
   if (!q) { res.json({ q, results: [] }); return; }
 
-  const cacheKey = `search:${q.toLowerCase()}`;
+  const offset = Math.min(200, Number(req.query.offset || 0));
+  const mode = ["popular", "trending", "recent"].includes(String(req.query.mode)) ? String(req.query.mode) : "popular";
+  const limit = Math.min(24, Number(req.query.limit || 16));
+  // offset > 0 → kısa TTL (60s) çünkü rotasyon amaçlı
+  const cacheKey = `search:${q.toLowerCase()}:${offset}:${mode}`;
   const cached = cacheGet(cacheKey);
   if (cached) { res.json(cached); return; }
 
   try {
     const data = await fetch(
-      `${SCRATCH_API}/search/projects?q=${encodeURIComponent(q)}&mode=popular&limit=16&offset=0`,
+      `${SCRATCH_API}/search/projects?q=${encodeURIComponent(q)}&mode=${mode}&limit=${limit}&offset=${offset}`,
       { headers: { "User-Agent": "ScratchAnalyzer/1.0", Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
     ).then(r => r.json()).catch(() => []);
 

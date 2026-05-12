@@ -526,8 +526,41 @@ function FlasKart({ proje, index, onClick, isPersonalized }: {
 }
 
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
-type AramaDurumu = "bos" | "yukleniyor" | "proje-sonuclari" | "hata";
-type FlasMode = "popular" | "trending" | "new";
+type AramaDurumu = "bos" | "yukleniyor" | "rate-limit" | "proje-sonuclari" | "hata";
+type FlasMode = "popular" | "trending" | "new" | "personal";
+
+// Geniş keyword havuzu — rotasyon için
+const FLASH_POOL = [
+  "platformer", "animation", "music", "art", "quiz", "clicker",
+  "minecraft", "rpg", "simulator", "drawing", "story", "battle",
+  "escape", "racing", "puzzle", "shooter", "adventure", "pixel",
+  "anime", "funny", "horror", "math", "rhythm", "snake", "garden",
+  "cats", "space", "castle", "ocean", "wizard", "robot", "ninja",
+];
+
+function pickFlashKeywords(n = 3): string[] {
+  return [...FLASH_POOL].sort(() => Math.random() - 0.5).slice(0, n);
+}
+
+function mergeUnique(lists: any[][], seen: Set<number>): any[] {
+  const result: any[] = [];
+  lists.flat().forEach(p => {
+    if (!seen.has(p.id)) { seen.add(p.id); result.push(p); }
+  });
+  return result;
+}
+
+// Paralel arama — farklı keyword ve offset ile zengin içerik havuzu
+async function fetchFlashPool(queries: string[], seen: Set<number>, mode = "popular"): Promise<any[]> {
+  const offset = Math.floor(Math.random() * 4) * 16; // 0, 16, 32, 48
+  const results = await Promise.all(
+    queries.map(q =>
+      fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(q)}&mode=${mode}&offset=${offset}&limit=16`)
+        .then(r => r.json()).catch(() => ({ results: [] }))
+    )
+  );
+  return mergeUnique(results.map(d => d.results || []), seen);
+}
 
 export default function Home() {
   const [, setLocation] = useLocation();
@@ -536,110 +569,126 @@ export default function Home() {
   const [sonuclar, setSonuclar] = useState<any[]>([]);
   const [aramanAdi, setAramanAdi] = useState("");
   const [hataMesaji, setHataMesaji] = useState("");
+  const [rateLimitVal, setRateLimitVal] = useState(0); // saniye sayacı
 
   // Flaş state
   const [flashProjeler, setFlashProjeler] = useState<any[]>([]);
   const [flashYukleniyor, setFlashYukleniyor] = useState(true);
   const [flashMod, setFlashMod] = useState<FlasMode>("popular");
-  const [flashPersonel, setFlashPersonel] = useState(false);
-  const [flashKategori, setFlashKategori] = useState<string | null>(null);
   const [learnedCats, setLearnedCats] = useState<string[]>(() => getTopCategories(1));
   const [aciKart, setAciKart] = useState<number | null>(null);
   const loadingMore = useRef(false);
   const seenIds = useRef<Set<number>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleInterest = useCallback((creator: string, delta: number) => {
     addInterest(creator, delta);
-    // Anında kategori sekmelerini güncelle — kullanıcı yeni bir kategori öğrenince tab belirir
     setLearnedCats(getTopCategories(1));
   }, []);
 
-  // Mod tabanlı yükleme (kategori seçili DEĞİLSE)
+  // Flaş içerik yükleme — paralel çok-keyword arama ile taze içerik
   useEffect(() => {
-    if (flashKategori) return;
+    let cancelled = false;
     setFlashYukleniyor(true);
     seenIds.current.clear();
-    const modeMap: Record<FlasMode, string> = { popular: "popular", trending: "trending", new: "recent" };
-    fetch(`${BASE}/api/scratch/popular?mode=${modeMap[flashMod]}&limit=20`)
-      .then(r => r.json())
-      .then(d => {
-        let projs: any[] = d.results || [];
-        projs.forEach((p: any) => seenIds.current.add(p.id));
+
+    const doLoad = async () => {
+      try {
+        let projs: any[] = [];
+        if (flashMod === "personal") {
+          // Personal: öğrenilen top 2 kategori + 1 keşif keyword
+          const cats = learnedCats.slice(0, 2);
+          const queries = [
+            ...cats.map(c => CAT_QUERY[c] || c),
+            pickFlashKeywords(1)[0],
+          ];
+          projs = await fetchFlashPool(queries, seenIds.current, "popular");
+        } else {
+          const modeQ = flashMod === "new" ? "recent" : flashMod === "trending" ? "trending" : "popular";
+          const keywords = pickFlashKeywords(3);
+          projs = await fetchFlashPool(keywords, seenIds.current, modeQ);
+        }
+        if (cancelled) return;
         const cats = loadCategories();
-        if (flashPersonel || Object.keys(cats).length > 0) projs = getPersonalized(projs);
-        if (Object.keys(cats).length > 0) projs = mixWithExploration(projs, projs, cats);
-        setFlashProjeler(projs);
-      })
-      .catch(() => setFlashProjeler([]))
-      .finally(() => setFlashYukleniyor(false));
-  }, [flashMod, flashPersonel, flashKategori]);
+        let sorted = Object.keys(cats).length > 0 ? getPersonalized(projs) : projs;
+        if (flashMod === "personal" && Object.keys(cats).length > 0) {
+          sorted = mixWithExploration(sorted, projs, cats);
+        }
+        setFlashProjeler(sorted);
+      } catch {
+        if (!cancelled) setFlashProjeler([]);
+      } finally {
+        if (!cancelled) setFlashYukleniyor(false);
+      }
+    };
 
-  // Kategori bazlı yükleme — tıklanan kategori sekme içeriği
-  useEffect(() => {
-    if (!flashKategori) return;
-    setFlashYukleniyor(true);
-    seenIds.current.clear();
-    const q = CAT_QUERY[flashKategori] || flashKategori;
-    // İki paralel istek: hem arama hem de popüler — daha zengin havuz
-    Promise.all([
-      fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => ({ results: [] })),
-      fetch(`${BASE}/api/scratch/popular?mode=popular&limit=20`).then(r => r.json()).catch(() => ({ results: [] })),
-    ]).then(([searchData, popularData]) => {
-      const fromSearch: any[] = searchData.results || [];
-      const fromPopular: any[] = (popularData.results || []).filter(
-        (p: any) => inferCategory(p.title || "") === flashKategori
-      );
-      // Birleştir, tekrarları at
-      const seen = new Set<number>();
-      const combined: any[] = [];
-      [...fromSearch, ...fromPopular].forEach((p: any) => {
-        if (!seen.has(p.id)) { seen.add(p.id); combined.push(p); }
-      });
-      combined.forEach((p: any) => seenIds.current.add(p.id));
-      const cats = loadCategories();
-      const sorted = getPersonalized(combined);
-      // Keşif karışımı: aynı kategoride boğulmasın, başka şeyler de görsün
-      const mixed = combined.length > 4 ? mixWithExploration(sorted, combined, cats) : sorted;
-      setFlashProjeler(mixed);
-    }).finally(() => setFlashYukleniyor(false));
-  }, [flashKategori]);
+    doLoad();
+    return () => { cancelled = true; };
+  }, [flashMod, learnedCats.join(",")]);
 
-  // Sessiz arka plan yükleme — TikTok "sonraki havuz" + keşif karışımı
+  // Sonsuz kaydırma — farklı keyword rotasyonu ile taze içerik
   const loadMore = useCallback(() => {
     if (loadingMore.current) return;
     loadingMore.current = true;
     const cats = loadCategories();
-    const topCat = Object.entries(cats).sort((a, b) => b[1] - a[1])[0];
-    // Aktif kategori varsa ona göre, yoksa trendlere bak
-    const q = topCat ? (CAT_QUERY[topCat[0]] || topCat[0])
-      : ["game", "animation", "art", "music", "platformer"][Math.floor(Math.random() * 5)];
+    const topCats = getTopCategories(1).slice(0, 2);
+    // Öğrenilen kategoriler + rastgele keşif keyword'ları
+    const catQueries = topCats.map(c => CAT_QUERY[c] || c);
+    const exploreQuery = pickFlashKeywords(1)[0];
+    const queries = [...catQueries, exploreQuery].slice(0, 3);
+    const offset = Math.floor(Math.random() * 6) * 16;
 
-    // Hem kategori arama hem rastgele popüler → birleştir, keşif karıştır
-    Promise.all([
-      fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => ({ results: [] })),
-      fetch(`${BASE}/api/scratch/popular?mode=popular&limit=12`).then(r => r.json()).catch(() => ({ results: [] })),
-    ]).then(([searchData, popularData]) => {
-      const allFresh = [...(searchData.results || []), ...(popularData.results || [])]
-        .filter((p: any) => !seenIds.current.has(p.id));
-      const unique: any[] = [];
-      const seen = new Set<number>();
-      allFresh.forEach((p: any) => { if (!seen.has(p.id)) { seen.add(p.id); unique.push(p); } });
-      unique.forEach((p: any) => seenIds.current.add(p.id));
-      if (unique.length === 0) return;
-      const sorted = getPersonalized(unique);
-      // Keşif karışımı — kategori varsa %20 farklı içerik
-      const mixed = Object.keys(cats).length > 0 ? mixWithExploration(sorted, unique, cats) : sorted;
+    Promise.all(
+      queries.map(q =>
+        fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(q)}&offset=${offset}&limit=14`)
+          .then(r => r.json()).catch(() => ({ results: [] }))
+      )
+    ).then(results => {
+      const fresh = mergeUnique(results.map(d => d.results || []), seenIds.current);
+      if (fresh.length === 0) return;
+      const sorted = Object.keys(cats).length > 0 ? getPersonalized(fresh) : fresh;
+      const mixed = Object.keys(cats).length > 0 ? mixWithExploration(sorted, fresh, cats) : sorted;
       setFlashProjeler(prev => [...prev, ...mixed]);
-    }).catch(() => {})
-      .finally(() => { loadingMore.current = false; });
+    }).catch(() => {}).finally(() => { loadingMore.current = false; });
   }, []);
+
+  // Rate limit geri sayım + otomatik yeniden deneme
+  useEffect(() => {
+    if (durum !== "rate-limit") return;
+    setRateLimitVal(5);
+    const id = setInterval(() => {
+      setRateLimitVal(v => {
+        if (v <= 1) {
+          clearInterval(id);
+          return 0;
+        }
+        return v - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [durum]);
+
+  useEffect(() => {
+    if (durum === "rate-limit" && rateLimitVal === 0 && aramanAdi) {
+      // Otomatik yeniden dene
+      setDurum("yukleniyor");
+      fetch(`${BASE}/api/scratch/user/${encodeURIComponent(aramanAdi)}`)
+        .then(r => {
+          if (r.ok) { setLocation(`/kullanici/${encodeURIComponent(aramanAdi)}`); setDurum("bos"); }
+          else if (r.status === 429) { setDurum("rate-limit"); }
+          else throw new Error();
+        })
+        .catch(() => { setDurum("hata"); setHataMesaji("Bağlantı hatası."); });
+    }
+  }, [rateLimitVal, durum, aramanAdi, setLocation]);
 
   const temizle = () => {
     setDurum("bos");
     setSonuclar([]);
     setAramaInput("");
     setAramanAdi("");
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
   };
 
   const handleArama = async (e: React.FormEvent) => {
@@ -651,7 +700,7 @@ export default function Home() {
     try {
       const kulRes = await fetch(`${BASE}/api/scratch/user/${encodeURIComponent(val)}`);
       if (kulRes.ok) { setLocation(`/kullanici/${encodeURIComponent(val)}`); setDurum("bos"); return; }
-      if (kulRes.status === 429) { setHataMesaji("Scratch API şu an yoğun. Biraz bekleyip tekrar dene."); setDurum("hata"); return; }
+      if (kulRes.status === 429) { setDurum("rate-limit"); return; }
       const aramaRes = await fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(val)}`);
       if (!aramaRes.ok) throw new Error();
       const data = await aramaRes.json();
@@ -663,10 +712,23 @@ export default function Home() {
     }
   };
 
-  const flashModListe: { key: FlasMode; label: string; icon: any }[] = [
-    { key: "popular", label: "Popüler", icon: Flame },
+  // Dinamik sekme listesi — öğrenilen kategoriye göre smooth morph
+  const topCat = learnedCats[0] || null;
+  const flashModListe: { key: FlasMode; label: string; icon: any; emoji?: string }[] = [
+    {
+      key: "popular",
+      label: "Popüler",
+      icon: topCat ? (CAT_ICON[topCat] || Flame) : Flame,
+      emoji: topCat ? CAT_EMOJI[topCat] : undefined,
+    },
     { key: "trending", label: "Trend", icon: TrendingUp },
     { key: "new", label: "Yeni", icon: Clock },
+    {
+      key: "personal",
+      label: topCat ? topCat.charAt(0).toUpperCase() + topCat.slice(1) : "Sana Özel",
+      icon: topCat ? (CAT_ICON[topCat] || Sparkles) : Sparkles,
+      emoji: topCat ? CAT_EMOJI[topCat] : undefined,
+    },
   ];
 
   return (
@@ -810,6 +872,64 @@ export default function Home() {
           ))}
         </motion.div>
 
+        {/* ── RATE LIMIT BEKLEME EKRANI ── */}
+        <AnimatePresence>
+          {durum === "rate-limit" && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-2xl mb-6"
+            >
+              <div
+                className="relative overflow-hidden rounded-2xl px-6 py-5 flex items-center gap-4"
+                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}
+              >
+                {/* Animasyonlu arka plan */}
+                <motion.div
+                  className="absolute inset-0 pointer-events-none"
+                  animate={{ opacity: [0.3, 0.6, 0.3] }}
+                  transition={{ duration: 2.5, repeat: Infinity }}
+                  style={{ background: "radial-gradient(ellipse at 20% 50%, hsl(var(--primary)/0.12), transparent 70%)" }}
+                />
+                {/* Spinner */}
+                <div className="relative shrink-0">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+                    className="w-10 h-10 rounded-full border-2 border-white/10"
+                    style={{ borderTopColor: "hsl(var(--primary))" }}
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center text-base">😤</span>
+                </div>
+                <div className="flex-1 min-w-0 relative">
+                  <p className="text-sm font-semibold text-white">Scratch çok meşgul şu an</p>
+                  <p className="text-xs text-white/45 mt-0.5">
+                    {rateLimitVal > 0
+                      ? `${rateLimitVal} saniye sonra otomatik yeniden deneniyor...`
+                      : "Yeniden deneniyor..."}
+                  </p>
+                  {/* Countdown bar */}
+                  <div className="mt-2.5 h-0.5 w-full rounded-full bg-white/10">
+                    <motion.div
+                      className="h-full rounded-full"
+                      style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+                      animate={{ width: `${((5 - rateLimitVal) / 5) * 100}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={temizle}
+                  className="relative shrink-0 text-white/25 hover:text-white/60 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── HATA ── */}
         <AnimatePresence>
           {durum === "hata" && (
@@ -901,96 +1021,57 @@ export default function Home() {
           className="w-full mb-10"
         >
           {/* Section header */}
-          <div className="flex flex-col gap-2 mb-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
-                >
-                  <Zap className="w-5 h-5 text-primary" />
-                </motion.div>
-                <h2 className="font-display font-bold text-lg text-white">Flaş</h2>
-              </div>
-
-              <div className="flex items-center gap-1 ml-auto flex-wrap">
-                {/* Mod tabları — kategori seçiliyse soluk */}
-                {flashModListe.map(({ key, label, icon: Icon }) => (
-                  <motion.button
-                    key={key}
-                    whileTap={{ scale: 0.94 }}
-                    onClick={() => { setFlashMod(key); setFlashKategori(null); }}
-                    className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all duration-200 border ${!flashKategori && flashMod === key ? "bg-primary/20 border-primary/50 text-primary" : "bg-white/5 border-white/10 text-white/40 hover:text-white/70"}`}
-                  >
-                    <Icon className="w-3 h-3" /> {label}
-                  </motion.button>
-                ))}
-                {/* Kişisel toggle */}
-                <motion.button
-                  whileTap={{ scale: 0.94 }}
-                  onClick={() => { setFlashPersonel(p => !p); setFlashKategori(null); }}
-                  className={`flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all duration-200 border ${!flashKategori && flashPersonel ? "bg-accent/20 border-accent/50 text-accent" : "bg-white/5 border-white/10 text-white/40 hover:text-white/70"}`}
-                >
-                  <Sparkles className="w-3 h-3" /> Sana Özel
-                </motion.button>
-              </div>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <div className="flex items-center gap-2">
+              <motion.div
+                animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
+              >
+                <Zap className="w-5 h-5 text-primary" />
+              </motion.div>
+              <h2 className="font-display font-bold text-lg text-white">Flaş</h2>
             </div>
 
-            {/* Dinamik kategori sekmeleri — etkileşim sonrası canlı belirir */}
-            <AnimatePresence>
-              {learnedCats.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 28 }}
-                  className="flex items-center gap-1.5 flex-wrap overflow-hidden"
-                >
-                  <span className="text-[10px] text-white/20 font-medium shrink-0">Keşfettin:</span>
-                  {learnedCats.slice(0, 6).map((cat, idx) => {
-                    const catScore = loadCategories()[cat] || 0;
-                    const isActive = flashKategori === cat;
-                    const emoji = CAT_EMOJI[cat] || "✨";
-                    return (
-                      <motion.button
-                        key={cat}
-                        initial={{ opacity: 0, scale: 0.5, x: -12 }}
-                        animate={{ opacity: 1, scale: 1, x: 0 }}
-                        exit={{ opacity: 0, scale: 0.5 }}
-                        transition={{ type: "spring", stiffness: 450, damping: 22, delay: idx * 0.05 }}
-                        whileHover={{ scale: 1.06 }}
-                        whileTap={{ scale: 0.92 }}
-                        onClick={() => setFlashKategori(isActive ? null : cat)}
-                        className={`relative flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all duration-200 border font-medium ${isActive
-                          ? "text-white border-transparent shadow-lg shadow-primary/25"
-                          : "bg-white/[0.04] border-white/10 text-white/55 hover:text-white/85 hover:border-white/20"
-                        }`}
-                        style={isActive ? {
-                          background: "linear-gradient(135deg, hsl(var(--primary)/0.35), hsl(var(--accent)/0.35))",
-                          borderColor: "hsl(var(--primary)/0.55)",
-                        } : undefined}
+            <div className="flex items-center gap-1 ml-auto flex-wrap">
+              {flashModListe.map(({ key, label, icon: Icon, emoji }) => {
+                const isActive = flashMod === key;
+                return (
+                  <motion.button
+                    key={key}
+                    whileTap={{ scale: 0.93 }}
+                    onClick={() => setFlashMod(key)}
+                    className={`relative flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all duration-300 border overflow-hidden ${isActive ? "border-primary/50 text-white shadow-md shadow-primary/15" : "bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:border-white/20"}`}
+                    style={isActive ? { background: "linear-gradient(135deg, hsl(var(--primary)/0.22), hsl(var(--accent)/0.15))" } : undefined}
+                  >
+                    {/* Smooth morph: icon + label değişince crossfade */}
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={`icon-${key}-${label}`}
+                        initial={{ opacity: 0, scale: 0.6 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.6 }}
+                        transition={{ duration: 0.18 }}
+                        className="flex items-center shrink-0"
                       >
-                        {/* Aktifken parlama efekti */}
-                        {isActive && (
-                          <motion.div
-                            className="absolute inset-0 rounded-full pointer-events-none"
-                            animate={{ opacity: [0.3, 0.7, 0.3] }}
-                            transition={{ duration: 1.8, repeat: Infinity }}
-                            style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.2), hsl(var(--accent)/0.2))" }}
-                          />
-                        )}
-                        <span className="relative">{emoji}</span>
-                        <span className="relative capitalize">{cat}</span>
-                        {/* Skor yoğunluk göstergesi */}
-                        {catScore >= 6 && (
-                          <span className="relative w-1.5 h-1.5 rounded-full bg-primary/80 shrink-0" />
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                        {emoji ? <span className="text-[11px]">{emoji}</span> : <Icon className="w-3 h-3" />}
+                      </motion.span>
+                    </AnimatePresence>
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={`label-${key}-${label}`}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.18 }}
+                        className="capitalize"
+                      >
+                        {label}
+                      </motion.span>
+                    </AnimatePresence>
+                  </motion.button>
+                );
+              })}
+            </div>
           </div>
 
 
@@ -1004,13 +1085,13 @@ export default function Home() {
           ) : flashProjeler.length === 0 ? (
             <div className="text-center py-10 text-white/30">
               <Gamepad2 className="w-10 h-10 mx-auto mb-2 opacity-20" />
-              <p className="text-sm">Proje yüklenemedi.</p>
+              <p className="text-sm">Scratch şu an yoğun, az sonra tekrar dene.</p>
             </div>
           ) : (
             <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
               {flashProjeler.map((proje, i) => {
                 const interests_ = loadInterests();
-                const isPersonalized = flashPersonel && (interests_[proje.creator] || 0) > 2;
+                const isPersonalized = flashMod === "personal" && (interests_[proje.creator] || 0) > 2;
                 return (
                   <FlasKart
                     key={proje.id}
