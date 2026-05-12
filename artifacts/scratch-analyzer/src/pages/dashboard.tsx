@@ -96,7 +96,7 @@ export default function Dashboard() {
   const raporRef = useRef<HTMLDivElement>(null);
 
   const { data: analiz, isLoading, error } = useGetScratchUser(username || "");
-  const { data: projelerData, isLoading: projelerYukleniyor } = useGetScratchUserProjects(username || "", { limit: 9 });
+  const { data: projelerData, isLoading: projelerYukleniyor, error: projelerHata } = useGetScratchUserProjects(username || "", { limit: 9 });
 
   const handleArama = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1188,6 +1188,17 @@ export default function Dashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
                 {[1, 2, 3].map((n) => <div key={n} className="h-48 bg-white/5 rounded-xl border border-white/10" />)}
               </div>
+            ) : projelerHata ? (
+              <GlassCard className="p-6 flex items-center gap-4 border-yellow-500/20 bg-yellow-500/5">
+                <span className="text-3xl shrink-0">⏳</span>
+                <div>
+                  <p className="text-sm font-semibold text-yellow-400">Projeler şu an yüklenemiyor</p>
+                  <p className="text-xs text-white/40 mt-0.5">Scratch API geçici olarak meşgul. Diğer analiz verileri gösteriliyor.</p>
+                </div>
+                <button onClick={() => window.location.reload()} className="ml-auto shrink-0 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
+                  Yenile
+                </button>
+              </GlassCard>
             ) : projelerData?.projects && projelerData.projects.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {projelerData.projects.map((proje) => {

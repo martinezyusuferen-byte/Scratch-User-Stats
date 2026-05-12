@@ -54,21 +54,9 @@ async function doFetch(url: string): Promise<any> {
 async function fetchScratch(url: string): Promise<any> {
   const cached = cacheGet(url);
   if (cached) return cached;
-
-  try {
-    const data = await doFetch(url);
-    cacheSet(url, data);
-    return data;
-  } catch (e: any) {
-    if (e?.status === 429) {
-      // Rate limit — 2 saniye bekle ve bir kez daha dene
-      await new Promise(r => setTimeout(r, 2000));
-      const data2 = await doFetch(url);
-      cacheSet(url, data2);
-      return data2;
-    }
-    throw e;
-  }
+  const data = await doFetch(url);
+  cacheSet(url, data);
+  return data;
 }
 
 function hesaplaRutbe(skor: number) {
@@ -1008,6 +996,9 @@ router.get("/user/:username/projects", async (req, res) => {
   } catch (err: any) {
     if (err.status === 404) {
       res.status(404).json({ error: "not_found", message: `"${username}" bulunamadı` });
+    } else if (err.status === 429) {
+      req.log.warn("Scratch projeleri rate-limit");
+      res.status(429).json({ error: "rate_limited", message: "Scratch API şu an çok meşgul. Biraz bekleyip tekrar dene." });
     } else {
       req.log.error(err, "Scratch projeleri alınırken hata");
       res.status(500).json({ error: "server_error", message: "Projeler alınamadı" });
