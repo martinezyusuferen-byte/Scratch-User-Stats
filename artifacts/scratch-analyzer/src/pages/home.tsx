@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Search, BarChart2, Target, TrendingUp, Users, Zap, Star,
   ArrowRight, Heart, Eye, Play, X, Loader2, User, Gamepad2,
@@ -525,6 +526,316 @@ function FlasKart({ proje, index, onClick, isPersonalized }: {
   );
 }
 
+// ─── Mobil TikTok Flaş Oynatıcı ──────────────────────────────────────────────
+function MobilFlasOynatici({
+  projeler, onInterest, onNearEnd,
+  flashMod, setFlashMod, flashModListe, flashYukleniyor,
+}: {
+  projeler: any[];
+  onInterest: (creator: string, delta: number) => void;
+  onNearEnd: () => void;
+  flashMod: FlasMode;
+  setFlashMod: (m: FlasMode) => void;
+  flashModListe: { key: FlasMode; label: string; icon: any; emoji?: string }[];
+  flashYukleniyor: boolean;
+}) {
+  const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [playing, setPlaying] = useState(false);
+  const [autoSec, setAutoSec] = useState(0);
+  const AUTO_ADVANCE = 25;
+  const timeRef = useRef(Date.now());
+  const nearEndFired = useRef(false);
+  const [, setLocation] = useLocation();
+  const dragY = useMotionValue(0);
+
+  const proje = projeler[index];
+
+  const flush = useCallback(() => {
+    if (!proje) return;
+    const secs = Math.floor((Date.now() - timeRef.current) / 1000);
+    const pct = secs / AUTO_ADVANCE;
+    let score = 0;
+    if (secs < 3)       score = -1;
+    else if (pct < 0.4) score = 1;
+    else if (pct < 0.7) score = 3;
+    else                score = 6;
+    if (score !== 0) { onInterest(proje.creator, score); addCategoryInterest(proje.title || "", score); }
+    addSessionTime(Math.max(0, secs));
+    timeRef.current = Date.now();
+  }, [proje, onInterest]);
+
+  const goNext = useCallback(() => {
+    if (index >= projeler.length - 1) return;
+    flush(); setDirection(1); setIndex(i => i + 1); setPlaying(false); setAutoSec(0);
+  }, [index, projeler.length, flush]);
+
+  const goPrev = useCallback(() => {
+    if (index <= 0) return;
+    flush(); setDirection(-1); setIndex(i => i - 1); setPlaying(false); setAutoSec(0);
+  }, [index, flush]);
+
+  useEffect(() => {
+    if (!nearEndFired.current && index >= projeler.length - 4) {
+      nearEndFired.current = true; onNearEnd();
+    }
+  }, [index, projeler.length, onNearEnd]);
+
+  useEffect(() => {
+    if (playing) return;
+    setAutoSec(0);
+    const id = setInterval(() => {
+      setAutoSec(prev => {
+        if (prev >= AUTO_ADVANCE - 1) { clearInterval(id); return AUTO_ADVANCE; }
+        return prev + 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [index, playing]);
+
+  useEffect(() => {
+    if (autoSec >= AUTO_ADVANCE && index < projeler.length - 1) goNext();
+  }, [autoSec, index, projeler.length, goNext]);
+
+  // mod değişince index sıfırla
+  useEffect(() => { setIndex(0); setPlaying(false); setAutoSec(0); nearEndFired.current = false; }, [flashMod]);
+
+  if (flashYukleniyor) {
+    return (
+      <div className="flex items-center justify-center" style={{ height: "100svh" }}>
+        <div className="flex flex-col items-center gap-4">
+          <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="w-10 h-10 border-2 border-white/10 border-t-primary rounded-full" />
+          <p className="text-xs text-white/30">Flaş yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!proje) {
+    return (
+      <div className="flex items-center justify-center text-white/30" style={{ height: "100svh" }}>
+        <p className="text-sm">İçerik bulunamadı.</p>
+      </div>
+    );
+  }
+
+  const slideVariants = {
+    enter:  (dir: number) => ({ y: dir > 0 ? "100%" : "-100%", opacity: 0 }),
+    center: { y: "0%", opacity: 1 },
+    exit:   (dir: number) => ({ y: dir > 0 ? "-100%" : "100%", opacity: 0 }),
+  };
+
+  return (
+    <div className="relative overflow-hidden w-full" style={{ height: "100svh" }}>
+
+      {/* Bulanık ortam arka planı */}
+      <AnimatePresence>
+        {proje.thumbnail_url && (
+          <motion.img key={proje.id + "-mbg"}
+            src={proje.thumbnail_url} alt=""
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 w-full h-full object-cover blur-3xl scale-125 opacity-[0.18] pointer-events-none select-none"
+          />
+        )}
+      </AnimatePresence>
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(0,0,0,0.45)" }} />
+
+      {/* Sekme başlığı */}
+      <div className="absolute top-0 left-0 right-0 z-30 pt-3 pb-2 px-3" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)" }}>
+        <div className="flex items-center gap-1.5 justify-center">
+          <motion.div animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }} transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}>
+            <Zap className="w-4 h-4 text-primary" />
+          </motion.div>
+          <span className="font-display font-bold text-sm text-white mr-1">Flaş</span>
+          {flashModListe.map(({ key, label, icon: Icon, emoji }) => {
+            const isActive = flashMod === key;
+            return (
+              <motion.button key={key} whileTap={{ scale: 0.9 }}
+                onClick={() => setFlashMod(key)}
+                className={`flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-full border transition-all ${isActive ? "border-primary/60 text-white" : "bg-black/30 border-white/10 text-white/45"}`}
+                style={isActive ? { background: "linear-gradient(135deg, hsl(var(--primary)/0.35), hsl(var(--accent)/0.25))", backdropFilter: "blur(8px)" } : { backdropFilter: "blur(8px)" }}
+              >
+                <AnimatePresence mode="wait">
+                  <motion.span key={`mi-${key}-${label}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center">
+                    {emoji ? <span className="text-[10px]">{emoji}</span> : <Icon className="w-3 h-3" />}
+                  </motion.span>
+                </AnimatePresence>
+                <AnimatePresence mode="wait">
+                  <motion.span key={`ml-${key}-${label}`} initial={{ opacity: 0, y: 3 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -3 }} transition={{ duration: 0.15 }} className="capitalize">{label}</motion.span>
+                </AnimatePresence>
+              </motion.button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Otomatik ilerleme progress bar */}
+      {!playing && (
+        <div className="absolute top-[52px] left-0 right-0 h-0.5 bg-white/10 z-30">
+          <motion.div className="h-full" transition={{ duration: 0.4 }}
+            style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))", width: `${(autoSec / AUTO_ADVANCE) * 100}%` }} />
+        </div>
+      )}
+
+      {/* Ana kart — drag ile kaydır */}
+      <AnimatePresence mode="wait" custom={direction}>
+        <motion.div
+          key={proje.id}
+          custom={direction}
+          variants={slideVariants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{ type: "spring", stiffness: 340, damping: 36, mass: 0.85 }}
+          drag="y"
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={0.1}
+          style={{ y: dragY, touchAction: "none" }}
+          onDragEnd={(_, { offset, velocity }) => {
+            const swipe = Math.abs(offset.y) > 55 || Math.abs(velocity.y) > 350;
+            if (!swipe) { dragY.set(0); return; }
+            if (offset.y < 0) goNext();
+            else goPrev();
+            dragY.set(0);
+          }}
+          className="absolute inset-0 cursor-grab active:cursor-grabbing select-none"
+        >
+          {playing ? (
+            /* ── Oynatma modu ── */
+            <div className="w-full h-full flex flex-col bg-black">
+              <iframe
+                src={`https://scratch.mit.edu/projects/${proje.id}/embed`}
+                className="w-full flex-1 border-0"
+                title={proje.title}
+                scrolling="no"
+                allowFullScreen
+              />
+              <div className="px-4 py-3 flex items-center justify-between" style={{ background: "rgba(0,0,0,0.9)" }}>
+                <div className="min-w-0 mr-3">
+                  <p className="text-xs font-bold text-white truncate">@{proje.creator}</p>
+                  <p className="text-[10px] text-white/40 truncate">{proje.title}</p>
+                </div>
+                <motion.button whileTap={{ scale: 0.88 }} onClick={() => setPlaying(false)}
+                  className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                  <X className="w-4 h-4 text-white" />
+                </motion.button>
+              </div>
+            </div>
+          ) : (
+            /* ── Önizleme modu ── */
+            <div className="relative w-full h-full">
+              {proje.thumbnail_url ? (
+                <img src={proje.thumbnail_url} alt={proje.title} className="w-full h-full object-cover pointer-events-none" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                  <Gamepad2 className="w-24 h-24 text-white/10" />
+                </div>
+              )}
+
+              {/* Degrade katmanlar */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-transparent pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-transparent pointer-events-none" />
+
+              {/* Merkez oynat butonu */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                <motion.button
+                  whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }}
+                  onClick={() => { setPlaying(true); onInterest(proje.creator, 5); }}
+                  className="w-20 h-20 rounded-full flex items-center justify-center shadow-2xl shadow-primary/60"
+                  style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+                >
+                  <Play className="w-9 h-9 text-white fill-white ml-1" />
+                </motion.button>
+              </div>
+
+              {/* Sağ kenar — TikTok aksiyonlar */}
+              <div className="absolute right-3 bottom-32 flex flex-col items-center gap-4 pointer-events-auto z-10">
+                {[
+                  { icon: Eye, val: proje.views, color: "text-blue-400" },
+                  { icon: Heart, val: proje.loves, color: "text-pink-400" },
+                  { icon: Star, val: proje.favorites, color: "text-yellow-400" },
+                ].map(({ icon: Icon, val, color }, idx) => (
+                  <div key={idx} className="flex flex-col items-center gap-1">
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center"
+                      style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                    <span className="text-[10px] text-white/70 font-medium">
+                      {(val || 0) >= 1000 ? `${((val || 0) / 1000).toFixed(1)}B` : (val || 0)}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex flex-col items-center gap-1">
+                  <motion.button whileTap={{ scale: 0.88 }}
+                    onClick={() => setLocation(`/kullanici/${proje.creator}`)}
+                    className="w-11 h-11 rounded-full flex items-center justify-center"
+                    style={{ background: "linear-gradient(135deg, hsl(var(--primary)/0.4), hsl(var(--accent)/0.3))", backdropFilter: "blur(8px)", border: "1px solid hsl(var(--primary)/0.4)" }}>
+                    <BarChart2 className="w-5 h-5 text-primary" />
+                  </motion.button>
+                  <span className="text-[10px] text-white/40">Analiz</span>
+                </div>
+              </div>
+
+              {/* Alt bilgi alanı */}
+              <div className="absolute bottom-0 left-0 right-16 px-4 pb-6 pt-20 pointer-events-auto"
+                style={{ background: "linear-gradient(to top, rgba(0,0,0,0.95) 0%, transparent 100%)" }}>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={() => setLocation(`/kullanici/${proje.creator}`)}
+                  className="flex items-center gap-2 mb-2">
+                  {proje.creator_avatar ? (
+                    <img src={proje.creator_avatar} className="w-8 h-8 rounded-full border-2 border-primary/60 shrink-0" alt="" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0">
+                      <User className="w-4 h-4 text-primary" />
+                    </div>
+                  )}
+                  <span className="text-sm font-bold text-white">@{proje.creator}</span>
+                </motion.button>
+                <h3 className="text-base font-bold text-white leading-snug line-clamp-2 mb-3">{proje.title}</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-white/30">{index + 1} / {projeler.length}</span>
+                  <span className="text-[11px] text-white/15">·</span>
+                  <motion.span className="text-[11px] text-white/20" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.5 }}>↑↓ kaydır</motion.span>
+                </div>
+              </div>
+
+              {/* "Sıradaki" uyarısı */}
+              <AnimatePresence>
+                {!playing && autoSec >= AUTO_ADVANCE - 5 && index < projeler.length - 1 && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-2 rounded-full text-xs font-bold text-white flex items-center gap-2 pointer-events-none"
+                    style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.12)" }}>
+                    <motion.span animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 0.8, repeat: Infinity }}>⏭</motion.span>
+                    {AUTO_ADVANCE - autoSec}s sonra sıradaki
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Aşağı ok ipucu */}
+              {index < projeler.length - 1 && (
+                <motion.div className="absolute bottom-2 left-1/2 -translate-x-1/2 pointer-events-none z-10"
+                  animate={{ y: [0, 5, 0], opacity: [0.3, 0.7, 0.3] }} transition={{ repeat: Infinity, duration: 1.4 }}>
+                  <ChevronDown className="w-5 h-5 text-white" />
+                </motion.div>
+              )}
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      {/* İlerleme noktaları — sağ üst */}
+      <div className="absolute top-[60px] right-3 z-30 flex flex-col gap-1 pointer-events-none">
+        {projeler.slice(Math.max(0, index - 2), Math.min(projeler.length, index + 4)).map((_, relI) => {
+          const absI = Math.max(0, index - 2) + relI;
+          return (
+            <div key={absI} className={`rounded-full transition-all ${absI === index ? "w-1.5 h-4 bg-primary" : "w-1 h-1.5 bg-white/25"}`} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
 type AramaDurumu = "bos" | "yukleniyor" | "rate-limit" | "proje-sonuclari" | "hata";
 type FlasMode = "popular" | "trending" | "new" | "personal";
@@ -563,6 +874,7 @@ async function fetchFlashPool(queries: string[], seen: Set<number>, mode = "popu
 }
 
 export default function Home() {
+  const isMobile = useIsMobile();
   const [, setLocation] = useLocation();
   const [aramaInput, setAramaInput] = useState("");
   const [durum, setDurum] = useState<AramaDurumu>("bos");
@@ -1013,103 +1325,97 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* ── FLAŞ BÖLÜMÜ ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 32 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 180, damping: 22, delay: 0.65 }}
-          className="w-full mb-10"
-        >
-          {/* Section header */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <div className="flex items-center gap-2">
-              <motion.div
-                animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
-              >
-                <Zap className="w-5 h-5 text-primary" />
-              </motion.div>
-              <h2 className="font-display font-bold text-lg text-white">Flaş</h2>
-            </div>
-
-            <div className="flex items-center gap-1 ml-auto flex-wrap">
-              {flashModListe.map(({ key, label, icon: Icon, emoji }) => {
-                const isActive = flashMod === key;
-                return (
-                  <motion.button
-                    key={key}
-                    whileTap={{ scale: 0.93 }}
-                    onClick={() => setFlashMod(key)}
-                    className={`relative flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all duration-300 border overflow-hidden ${isActive ? "border-primary/50 text-white shadow-md shadow-primary/15" : "bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:border-white/20"}`}
-                    style={isActive ? { background: "linear-gradient(135deg, hsl(var(--primary)/0.22), hsl(var(--accent)/0.15))" } : undefined}
-                  >
-                    {/* Smooth morph: icon + label değişince crossfade */}
-                    <AnimatePresence mode="wait">
-                      <motion.span
-                        key={`icon-${key}-${label}`}
-                        initial={{ opacity: 0, scale: 0.6 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.6 }}
-                        transition={{ duration: 0.18 }}
-                        className="flex items-center shrink-0"
-                      >
-                        {emoji ? <span className="text-[11px]">{emoji}</span> : <Icon className="w-3 h-3" />}
-                      </motion.span>
-                    </AnimatePresence>
-                    <AnimatePresence mode="wait">
-                      <motion.span
-                        key={`label-${key}-${label}`}
-                        initial={{ opacity: 0, y: 4 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -4 }}
-                        transition={{ duration: 0.18 }}
-                        className="capitalize"
-                      >
-                        {label}
-                      </motion.span>
-                    </AnimatePresence>
-                  </motion.button>
-                );
-              })}
-            </div>
+        {/* ── FLAŞ BÖLÜMÜ — mobil TikTok feed ── */}
+        {isMobile && (
+          <div className="w-full -mx-4 mb-8">
+            <MobilFlasOynatici
+              projeler={flashProjeler}
+              onInterest={handleInterest}
+              onNearEnd={loadMore}
+              flashMod={flashMod}
+              setFlashMod={setFlashMod}
+              flashModListe={flashModListe}
+              flashYukleniyor={flashYukleniyor}
+            />
           </div>
+        )}
 
+        {/* ── FLAŞ BÖLÜMÜ — masaüstü (yatay scroll) ── */}
+        {!isMobile && (
+          <motion.div
+            initial={{ opacity: 0, y: 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 180, damping: 22, delay: 0.65 }}
+            className="w-full mb-10"
+          >
+            {/* Section header */}
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <div className="flex items-center gap-2">
+                <motion.div
+                  animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
+                >
+                  <Zap className="w-5 h-5 text-primary" />
+                </motion.div>
+                <h2 className="font-display font-bold text-lg text-white">Flaş</h2>
+              </div>
 
-          {/* Kartlar — yatay kaydırma */}
-          {flashYukleniyor ? (
-            <div className="flex gap-3 overflow-hidden">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="shrink-0 rounded-2xl bg-white/5 animate-pulse" style={{ width: 140, aspectRatio: "9/14" }} />
-              ))}
+              <div className="flex items-center gap-1 ml-auto flex-wrap">
+                {flashModListe.map(({ key, label, icon: Icon, emoji }) => {
+                  const isActive = flashMod === key;
+                  return (
+                    <motion.button
+                      key={key}
+                      whileTap={{ scale: 0.93 }}
+                      onClick={() => setFlashMod(key)}
+                      className={`relative flex items-center gap-1 text-xs px-3 py-1.5 rounded-full transition-all duration-300 border overflow-hidden ${isActive ? "border-primary/50 text-white shadow-md shadow-primary/15" : "bg-white/5 border-white/10 text-white/50 hover:text-white/80 hover:border-white/20"}`}
+                      style={isActive ? { background: "linear-gradient(135deg, hsl(var(--primary)/0.22), hsl(var(--accent)/0.15))" } : undefined}
+                    >
+                      <AnimatePresence mode="wait">
+                        <motion.span key={`icon-${key}-${label}`} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} transition={{ duration: 0.18 }} className="flex items-center shrink-0">
+                          {emoji ? <span className="text-[11px]">{emoji}</span> : <Icon className="w-3 h-3" />}
+                        </motion.span>
+                      </AnimatePresence>
+                      <AnimatePresence mode="wait">
+                        <motion.span key={`label-${key}-${label}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }} className="capitalize">{label}</motion.span>
+                      </AnimatePresence>
+                    </motion.button>
+                  );
+                })}
+              </div>
             </div>
-          ) : flashProjeler.length === 0 ? (
-            <div className="text-center py-10 text-white/30">
-              <Gamepad2 className="w-10 h-10 mx-auto mb-2 opacity-20" />
-              <p className="text-sm">Scratch şu an yoğun, az sonra tekrar dene.</p>
-            </div>
-          ) : (
-            <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-              {flashProjeler.map((proje, i) => {
-                const interests_ = loadInterests();
-                const isPersonalized = flashMod === "personal" && (interests_[proje.creator] || 0) > 2;
-                return (
-                  <FlasKart
-                    key={proje.id}
-                    proje={proje}
-                    index={i}
-                    isPersonalized={isPersonalized}
-                    onClick={() => setAciKart(i)}
-                  />
-                );
-              })}
-            </div>
-          )}
 
-          {/* Mobile swipe hint */}
-          <p className="text-[10px] text-white/20 text-center mt-2 sm:hidden">
-            Kartlara dokun · Oynatıcıda kaydır veya ok tuşlarını kullan
-          </p>
-        </motion.div>
+            {/* Kartlar — yatay kaydırma */}
+            {flashYukleniyor ? (
+              <div className="flex gap-3 overflow-hidden">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="shrink-0 rounded-2xl bg-white/5 animate-pulse" style={{ width: 140, aspectRatio: "9/14" }} />
+                ))}
+              </div>
+            ) : flashProjeler.length === 0 ? (
+              <div className="text-center py-10 text-white/30">
+                <Gamepad2 className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Scratch şu an yoğun, az sonra tekrar dene.</p>
+              </div>
+            ) : (
+              <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+                {flashProjeler.map((proje, i) => {
+                  const interests_ = loadInterests();
+                  const isPersonalized = flashMod === "personal" && (interests_[proje.creator] || 0) > 2;
+                  return (
+                    <FlasKart
+                      key={proje.id}
+                      proje={proje}
+                      index={i}
+                      isPersonalized={isPersonalized}
+                      onClick={() => setAciKart(i)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* ── ÖZELLİK KARTLARI ── */}
         <motion.div
