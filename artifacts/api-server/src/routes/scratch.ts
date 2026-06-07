@@ -5,14 +5,19 @@ const router: IRouter = Router();
 const SCRATCH_API = "https://api.scratch.mit.edu";
 const SCRATCH_CDN = "https://cdn2.scratch.mit.edu";
 
-// ── Basit bellek önbelleği (5 dakika TTL) ──
+// ── Basit bellek önbelleği (5 dakika TTL) + stale ──
 const cache = new Map<string, { data: any; ts: number }>();
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 5 * 60 * 1000; // 5 dk
+const STALE_TTL = 30 * 60 * 1000; // 30 dk — stale olarak servis edebilir
 
-function cacheGet(key: string) {
+function cacheGet(key: string, allowStale = true) {
   const e = cache.get(key);
   if (!e) return null;
-  if (Date.now() - e.ts > CACHE_TTL) { cache.delete(key); return null; }
+  const age = Date.now() - e.ts;
+  if (age > CACHE_TTL) {
+    if (allowStale && age <= STALE_TTL) return e.data; // stale ama servis et
+    cache.delete(key); return null;
+  }
   return e.data;
 }
 function cacheSet(key: string, data: any) {
@@ -23,7 +28,7 @@ function cacheSet(key: string, data: any) {
   cache.set(key, { data, ts: Date.now() });
 }
 
-async function doFetch(url: string): Promise<any> {
+async function doFetch(url: string, attempt = 1): Promise<any> {
   const res = await fetch(url, {
     headers: { "User-Agent": "ScratchAnalyzer/1.0", "Accept": "application/json" },
     signal: AbortSignal.timeout(8000),
@@ -51,12 +56,28 @@ async function doFetch(url: string): Promise<any> {
   return data;
 }
 
-async function fetchScratch(url: string): Promise<any> {
+async function fetchScratch(url: string, { maxRetries = 3, delayMs = 1200 } = {}): Promise<any> {
   const cached = cacheGet(url);
   if (cached) return cached;
-  const data = await doFetch(url);
-  cacheSet(url, data);
-  return data;
+  let lastErr: any;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      if (i > 0) {
+        await new Promise(r => setTimeout(r, delayMs + i * 600));
+      }
+      const data = await doFetch(url);
+      cacheSet(url, data);
+      return data;
+    } catch (err: any) {
+      lastErr = err;
+      // 404 = dönümü yok
+      if (err.status === 404) throw err;
+    }
+  }
+  // Sonuç olmadı, stale cache varsa döndür
+  const stale = cacheGet(url, true);
+  if (stale) return stale;
+  throw lastErr;
 }
 
 function hesaplaRutbe(skor: number) {

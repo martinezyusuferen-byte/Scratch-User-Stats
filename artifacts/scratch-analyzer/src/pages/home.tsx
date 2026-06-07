@@ -837,7 +837,7 @@ function MobilFlasOynatici({
 }
 
 // ─── Ana Sayfa ────────────────────────────────────────────────────────────────
-type AramaDurumu = "bos" | "yukleniyor" | "rate-limit" | "proje-sonuclari" | "hata";
+type AramaDurumu = "bos" | "yukleniyor" | "proje-sonuclari" | "hata";
 type FlasMode = "popular" | "trending" | "new" | "personal";
 
 // Geniş keyword havuzu — rotasyon için
@@ -881,7 +881,6 @@ export default function Home() {
   const [sonuclar, setSonuclar] = useState<any[]>([]);
   const [aramanAdi, setAramanAdi] = useState("");
   const [hataMesaji, setHataMesaji] = useState("");
-  const [rateLimitVal, setRateLimitVal] = useState(0); // saniye sayacı
 
   // Flaş state
   const [flashProjeler, setFlashProjeler] = useState<any[]>([]);
@@ -965,36 +964,6 @@ export default function Home() {
     }).catch(() => {}).finally(() => { loadingMore.current = false; });
   }, []);
 
-  // Rate limit geri sayım + otomatik yeniden deneme
-  useEffect(() => {
-    if (durum !== "rate-limit") return;
-    setRateLimitVal(5);
-    const id = setInterval(() => {
-      setRateLimitVal(v => {
-        if (v <= 1) {
-          clearInterval(id);
-          return 0;
-        }
-        return v - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [durum]);
-
-  useEffect(() => {
-    if (durum === "rate-limit" && rateLimitVal === 0 && aramanAdi) {
-      // Otomatik yeniden dene
-      setDurum("yukleniyor");
-      fetch(`${BASE}/api/scratch/user/${encodeURIComponent(aramanAdi)}`)
-        .then(r => {
-          if (r.ok) { setLocation(`/kullanici/${encodeURIComponent(aramanAdi)}`); setDurum("bos"); }
-          else if (r.status === 429) { setDurum("rate-limit"); }
-          else throw new Error();
-        })
-        .catch(() => { setDurum("hata"); setHataMesaji("Bağlantı hatası."); });
-    }
-  }, [rateLimitVal, durum, aramanAdi, setLocation]);
-
   const temizle = () => {
     setDurum("bos");
     setSonuclar([]);
@@ -1012,7 +981,6 @@ export default function Home() {
     try {
       const kulRes = await fetch(`${BASE}/api/scratch/user/${encodeURIComponent(val)}`);
       if (kulRes.ok) { setLocation(`/kullanici/${encodeURIComponent(val)}`); setDurum("bos"); return; }
-      if (kulRes.status === 429) { setDurum("rate-limit"); return; }
       const aramaRes = await fetch(`${BASE}/api/scratch/search?q=${encodeURIComponent(val)}`);
       if (!aramaRes.ok) throw new Error();
       const data = await aramaRes.json();
@@ -1184,63 +1152,7 @@ export default function Home() {
           ))}
         </motion.div>
 
-        {/* ── RATE LIMIT BEKLEME EKRANI ── */}
-        <AnimatePresence>
-          {durum === "rate-limit" && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-2xl mb-6"
-            >
-              <div
-                className="relative overflow-hidden rounded-2xl px-6 py-5 flex items-center gap-4"
-                style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}
-              >
-                {/* Animasyonlu arka plan */}
-                <motion.div
-                  className="absolute inset-0 pointer-events-none"
-                  animate={{ opacity: [0.3, 0.6, 0.3] }}
-                  transition={{ duration: 2.5, repeat: Infinity }}
-                  style={{ background: "radial-gradient(ellipse at 20% 50%, hsl(var(--primary)/0.12), transparent 70%)" }}
-                />
-                {/* Spinner */}
-                <div className="relative shrink-0">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
-                    className="w-10 h-10 rounded-full border-2 border-white/10"
-                    style={{ borderTopColor: "hsl(var(--primary))" }}
-                  />
-                  <span className="absolute inset-0 flex items-center justify-center text-base">😤</span>
-                </div>
-                <div className="flex-1 min-w-0 relative">
-                  <p className="text-sm font-semibold text-white">Scratch çok meşgul şu an</p>
-                  <p className="text-xs text-white/45 mt-0.5">
-                    {rateLimitVal > 0
-                      ? `${rateLimitVal} saniye sonra otomatik yeniden deneniyor...`
-                      : "Yeniden deneniyor..."}
-                  </p>
-                  {/* Countdown bar */}
-                  <div className="mt-2.5 h-0.5 w-full rounded-full bg-white/10">
-                    <motion.div
-                      className="h-full rounded-full"
-                      style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
-                      animate={{ width: `${((5 - rateLimitVal) / 5) * 100}%` }}
-                      transition={{ duration: 0.5 }}
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={temizle}
-                  className="relative shrink-0 text-white/25 hover:text-white/60 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Rate limit ekranı kaldırıldı — API server artık kendi şekilde çözüm üretiyor */}
 
         {/* ── HATA ── */}
         <AnimatePresence>
@@ -1395,7 +1307,7 @@ export default function Home() {
             ) : flashProjeler.length === 0 ? (
               <div className="text-center py-10 text-white/30">
                 <Gamepad2 className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                <p className="text-sm">Scratch şu an yoğun, az sonra tekrar dene.</p>
+                <p className="text-sm">Yeni içerik aranıyor...</p>
               </div>
             ) : (
               <div ref={scrollRef} className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>

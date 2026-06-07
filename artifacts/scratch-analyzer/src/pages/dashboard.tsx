@@ -127,29 +127,14 @@ export default function Dashboard() {
   }
 
   if (error || !analiz) {
-    const errData = (error as any)?.data;
-    const isRateLimit = (error as any)?.status === 429 || errData?.error === "rate_limited";
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6">
         <GlassCard className="max-w-md w-full p-8 text-center" gradient>
-          {isRateLimit ? (
-            <>
-              <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">⏳</span>
-              </div>
-              <h2 className="text-2xl font-display font-bold mb-2 text-yellow-400">Scratch API Meşgul</h2>
-              <p className="text-muted-foreground mb-4">Scratch sunucuları şu an çok fazla istek aldı. 1–2 dakika bekleyip tekrar dene.</p>
-              <p className="text-xs text-white/30 mb-8">Bu geçici bir durumdur.</p>
-            </>
-          ) : (
-            <>
-              <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
-              <h2 className="text-2xl font-display font-bold mb-2">Kullanıcı Bulunamadı</h2>
-              <p className="text-muted-foreground mb-8">
-                "{username}" adlı Scratch profili bulunamadı. Kullanıcı adının doğru yazıldığından emin ol.
-              </p>
-            </>
-          )}
+          <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+          <h2 className="text-2xl font-display font-bold mb-2">Kullanıcı Bulunamadı</h2>
+          <p className="text-muted-foreground mb-8">
+            "{username}" adlı Scratch profili bulunamadı. Kullanıcı adının doğru yazıldığından emin ol.
+          </p>
           <div className="flex flex-col gap-3">
             <button onClick={() => window.location.reload()}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 transition-colors font-semibold">
@@ -286,18 +271,7 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 mt-4 sm:mt-6">
-        {(analiz as any).data_quality === "rate_limited" && (
-          <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-400">
-            <span className="text-xl shrink-0">⏳</span>
-            <div>
-              <span className="font-semibold">Scratch API geçici olarak yoğun.</span>{" "}
-              <span className="text-yellow-400/70">İstatistikler kısmi olabilir. 1–2 dakika bekleyip sayfayı yenile.</span>
-            </div>
-            <button onClick={() => window.location.reload()} className="ml-auto shrink-0 px-3 py-1 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-xs font-semibold transition-colors">
-              Yenile
-            </button>
-          </div>
-        )}
+        {/* data_quality uyarıları kaldırıldı — API server artık kendi şekilde çözüm üretiyor */}
 
         <motion.div variants={container} initial="hidden" animate="show" className="space-y-4 sm:space-y-6">
 
@@ -1189,15 +1163,12 @@ export default function Dashboard() {
                 {[1, 2, 3].map((n) => <div key={n} className="h-48 bg-white/5 rounded-xl border border-white/10" />)}
               </div>
             ) : projelerHata ? (
-              <GlassCard className="p-6 flex items-center gap-4 border-yellow-500/20 bg-yellow-500/5">
-                <span className="text-3xl shrink-0">⏳</span>
+              <GlassCard className="p-6 flex items-center gap-4 border-white/10 bg-white/5">
+                <span className="text-3xl shrink-0">🎮</span>
                 <div>
-                  <p className="text-sm font-semibold text-yellow-400">Projeler şu an yüklenemiyor</p>
-                  <p className="text-xs text-white/40 mt-0.5">Scratch API geçici olarak meşgul. Diğer analiz verileri gösteriliyor.</p>
+                  <p className="text-sm font-semibold text-white/50">Projeler yükleniyor</p>
+                  <p className="text-xs text-white/30 mt-0.5">Birazdan tekrar denenecek.</p>
                 </div>
-                <button onClick={() => window.location.reload()} className="ml-auto shrink-0 text-xs px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-colors">
-                  Yenile
-                </button>
               </GlassCard>
             ) : projelerData?.projects && projelerData.projects.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

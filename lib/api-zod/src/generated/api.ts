@@ -4,7 +4,8 @@
  * Api
  * Scratch Analyzer API
  * OpenAPI spec version: 0.1.0
- */zod";
+ */
+import * as zod from "zod";
 
 /**
  * Returns server health status
