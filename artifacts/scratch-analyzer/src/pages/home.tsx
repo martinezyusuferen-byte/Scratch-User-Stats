@@ -7,6 +7,7 @@ import {
   ArrowRight, Heart, Eye, Play, X, Loader2, User, Gamepad2,
   ChevronUp, ChevronDown, Flame, Clock, Sparkles,
   Music, Palette, BookOpen, Globe,
+  Link2, Plus, Minus, RefreshCw, Bell,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -522,6 +523,190 @@ function FlasKart({ proje, index, onClick, isPersonalized }: {
           <p className="text-[10px] text-white/40 mt-0.5 truncate">@{proje.creator}</p>
         </div>
       </div>
+    </motion.div>
+  );
+}
+
+// ─── Onboarding Modal ───
+const CONNECTED_KEY = "ss_connected_user";
+const FOLLOWING_KEY = "ss_following";
+
+function getConnectedUser(): string | null {
+  try { return localStorage.getItem(CONNECTED_KEY); } catch { return null; }
+}
+function setConnectedUser(user: string | null) {
+  if (user) localStorage.setItem(CONNECTED_KEY, user);
+  else localStorage.removeItem(CONNECTED_KEY);
+}
+function getFollowing(): string[] {
+  try { return JSON.parse(localStorage.getItem(FOLLOWING_KEY) || "[]"); } catch { return []; }
+}
+function addFollowing(username: string) {
+  const list = getFollowing();
+  if (!list.includes(username)) {
+    list.push(username);
+    try { localStorage.setItem(FOLLOWING_KEY, JSON.stringify(list)); } catch {}
+  }
+}
+function removeFollowing(username: string) {
+  const list = getFollowing().filter(u => u !== username);
+  try { localStorage.setItem(FOLLOWING_KEY, JSON.stringify(list)); } catch {}
+}
+
+function BaglaModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState(0); // 0=intro, 1=input, 2=loading, 3=success
+  const [username, setUsername] = useState("");
+  const [hata, setHata] = useState("");
+  const [, setLocation] = useLocation();
+
+  const handleBagla = async () => {
+    const val = username.trim().toLowerCase();
+    if (!val) return;
+    setStep(2); setHata("");
+    try {
+      const res = await fetch(`${BASE}/api/scratch/user/${encodeURIComponent(val)}`);
+      if (!res.ok) {
+        setHata("Bu kullanıcı adı bulunamadı.");
+        setStep(1); return;
+      }
+      const data = await res.json();
+      setConnectedUser(val);
+      // Default: takip ettiği kişileri ekle
+      try {
+        const fRes = await fetch(`${BASE}/api/scratch/user/${encodeURIComponent(val)}/following`);
+        const fData = await fRes.json();
+        if (fData.following?.length) {
+          fData.following.slice(0, 8).forEach((u: any) => addFollowing(u.username));
+        }
+      } catch {}
+      setStep(3);
+      setTimeout(() => { onClose(); window.location.reload(); }, 1800);
+    } catch {
+      setHata("Bağlantı hatası. Tekrar dene.");
+      setStep(1);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.85)" }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.85, y: 30 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 280, damping: 22 }}
+        className="w-full max-w-md rounded-3xl overflow-hidden relative"
+        style={{ background: "rgba(15,15,25,0.95)", border: "1px solid rgba(255,255,255,0.08)", backdropFilter: "blur(20px)" }}
+      >
+        {/* Ambient background */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <motion.div
+            className="absolute w-96 h-96 rounded-full opacity-20"
+            style={{ left: "-50%", top: "-20%", background: "radial-gradient(circle, hsl(var(--primary)), transparent)" }}
+            animate={{ x: [0, 40, 0], scale: [1, 1.2, 1] }}
+            transition={{ duration: 8, repeat: Infinity }}
+          />
+          <motion.div
+            className="absolute w-80 h-80 rounded-full opacity-15"
+            style={{ right: "-30%", bottom: "-10%", background: "radial-gradient(circle, hsl(var(--accent)), transparent)" }}
+            animate={{ x: [0, -30, 0], scale: [1, 1.15, 1] }}
+            transition={{ duration: 10, repeat: Infinity, delay: 2 }}
+          />
+        </div>
+
+        <div className="relative px-6 py-8">
+          {/* Close */}
+          <button onClick={onClose} className="absolute top-4 right-4 text-white/25 hover:text-white/60 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+
+          {step === 0 && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <div className="flex items-center justify-center mb-5">
+                <motion.div
+                  className="w-20 h-20 rounded-full flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+                  animate={{ scale: [1, 1.05, 1], rotate: [0, 5, -5, 0] }}
+                  transition={{ duration: 3, repeat: Infinity }}
+                >
+                  <Link2 className="w-9 h-9 text-white" />
+                </motion.div>
+              </div>
+              <h2 className="text-2xl font-display font-bold text-white text-center mb-2">Hesabını Bağla</h2>
+              <p className="text-sm text-white/40 text-center mb-6 leading-relaxed">
+                Takip ettiğin kişilerin yeni projelerini keşfet. 
+                <br/>Scratch analizin şimdi daha sosyal.
+              </p>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setStep(1)}
+                className="w-full py-3.5 rounded-xl font-semibold text-white"
+                style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+              >
+                Başlat
+              </motion.button>
+            </motion.div>
+          )}
+
+          {step === 1 && (
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+              <h2 className="text-xl font-display font-bold text-white mb-1">Kullanıcı adın</h2>
+              <p className="text-sm text-white/40 mb-5">Scratch profil adını gir.</p>
+              <div className="flex items-center bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 mb-4 focus-within:border-primary/40 transition-colors">
+                <span className="text-white/30 text-sm mr-2">@</span>
+                <input
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="scratchkullanici"
+                  className="flex-1 bg-transparent border-none outline-none text-white text-sm"
+                  autoComplete="off"
+                  onKeyDown={e => e.key === "Enter" && handleBagla()}
+                  autoFocus
+                />
+              </div>
+              {hata && <p className="text-xs text-red-400 mb-3">{hata}</p>}
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={handleBagla}
+                className="w-full py-3.5 rounded-xl font-semibold text-white"
+                style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+              >
+                Bağla
+              </motion.button>
+            </motion.div>
+          )}
+
+          {step === 2 && (
+            <motion.div className="flex flex-col items-center py-8">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                className="w-12 h-12 rounded-full border-3 border-white/10 border-t-primary mb-4"
+              />
+              <p className="text-sm text-white/50">Profillin kontrol ediliyor...</p>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center py-6">
+              <motion.div
+                initial={{ scale: 0 }} animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, delay: 0.1 }}
+                className="w-16 h-16 rounded-full flex items-center justify-center mb-4"
+                style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+              >
+                <CheckCircle className="w-8 h-8 text-white" />
+              </motion.div>
+              <h3 className="text-lg font-bold text-white mb-1">Başarılı!</h3>
+              <p className="text-sm text-white/50">Hesabın bağlandı. Yönlendiriliyor...</p>
+            </motion.div>
+          )}
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

@@ -1027,4 +1027,89 @@ router.get("/user/:username/projects", async (req, res) => {
   }
 });
 
+// ── Sosyal: following listesi + feed ──
+
+router.get("/user/:username/following", async (req, res) => {
+  const { username } = req.params;
+  const limit = Math.min(40, Number(req.query.limit) || 20);
+  const offset = Math.min(100, Number(req.query.offset || 0));
+  const cacheKey = `following:${username}:${offset}:${limit}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    const data = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=${limit}&offset=${offset}`);
+    if (!Array.isArray(data)) {
+      res.status(404).json({ error: "not_found", message: `"${username}" bulunamadı` });
+      return;
+    }
+    const result = {
+      username,
+      following: data.map((u: any) => ({
+        id: u.id,
+        username: u.username,
+        avatar_url: u.profile?.images?.["60x60"] || `https://cdn2.scratch.mit.edu/get_image/user/${u.id}_60x60.png`,
+      })),
+    };
+    cacheSet(cacheKey, result);
+    res.json(result);
+  } catch (err: any) {
+    if (err.status === 404) {
+      res.status(404).json({ error: "not_found", message: `"${username}" bulunamadı` });
+    } else {
+      res.json({ username, following: [] });
+    }
+  }
+});
+
+// Takip ettiği kişilerin son projelerini çek → feed
+router.get("/feed/:username", async (req, res) => {
+  const { username } = req.params;
+  const cacheKey = `feed:${username}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    const following = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=12&offset=0`);
+    if (!Array.isArray(following)) { res.json({ activities: [] }); return; }
+
+    // Her kişinin son projelerini çek
+    const activities: any[] = [];
+    const creators = following.slice(0, 6); // ilk 6 kişi
+    for (const creator of creators) {
+      try {
+        const projeler = await fetchScratch(`${SCRATCH_API}/users/${creator.username}/projects?limit=3&offset=0`);
+        if (Array.isArray(projeler)) {
+          projeler.slice(0, 2).forEach((p: any, i: number) => {
+            activities.push({
+              type: "share",
+              actor: creator.username,
+              actor_avatar: creator.profile?.images?.["60x60"] || `https://cdn2.scratch.mit.edu/get_image/user/${creator.id}_60x60.png`,
+              project: {
+                id: p.id,
+                title: p.title || "Başlıksız",
+                thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+                loves: p.stats?.loves || 0,
+                views: p.stats?.views || 0,
+                creator: creator.username,
+              },
+              // Simulated recency — spread across "recent" timeframe
+              created_at: new Date(Date.now() - i * 3600000 * 2).toISOString(),
+            });
+          });
+        }
+      } catch (_) { /* skip */ }
+    }
+
+    // Sort by newest first
+    activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const result = { activities: activities.slice(0, 12) };
+    cacheSet(cacheKey, result);
+    res.json(result);
+  } catch (_) {
+    res.json({ activities: [] });
+  }
+});
+
 export default router;
