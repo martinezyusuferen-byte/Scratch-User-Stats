@@ -8,6 +8,7 @@ import {
   ChevronUp, ChevronDown, Flame, Clock, Sparkles,
   Music, Palette, BookOpen, Globe,
   Link2, Plus, Minus, RefreshCw, Bell,
+  CheckCircle, UserPlus,
 } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -552,6 +553,17 @@ function removeFollowing(username: string) {
   const list = getFollowing().filter(u => u !== username);
   try { localStorage.setItem(FOLLOWING_KEY, JSON.stringify(list)); } catch {}
 }
+function relativeTime(iso: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "az önce";
+  if (m < 60) return `${m} dakika önce`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} saat önce`;
+  const g = Math.floor(h / 24);
+  return `${g} gün önce`;
+}
 
 function BaglaModal({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0); // 0=intro, 1=input, 2=loading, 3=success
@@ -1067,6 +1079,12 @@ export default function Home() {
   const [aramanAdi, setAramanAdi] = useState("");
   const [hataMesaji, setHataMesaji] = useState("");
 
+  // Sosyal feed state
+  const [connectedUser, setConnectedUser] = useState<string | null>(() => getConnectedUser());
+  const [feed, setFeed] = useState<any[]>([]);
+  const [feedYukleniyor, setFeedYukleniyor] = useState(false);
+  const [showBagla, setShowBagla] = useState(false);
+
   // Flaş state
   const [flashProjeler, setFlashProjeler] = useState<any[]>([]);
   const [flashYukleniyor, setFlashYukleniyor] = useState(true);
@@ -1082,6 +1100,36 @@ export default function Home() {
     addInterest(creator, delta);
     setLearnedCats(getTopCategories(1));
   }, []);
+
+  // Feed yukleme
+  useEffect(() => {
+    if (!connectedUser) return;
+    setFeedYukleniyor(true);
+    fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}`)
+      .then(r => r.json())
+      .then(d => {
+        const list = (d.activities || []).map((a: any) => ({
+          ...a,
+          actorAvatar: a.actor_avatar || a.actorAvatar,
+          projectTitle: a.project?.title || a.projectTitle,
+          projectId: a.project?.id || a.projectId,
+          targetUser: a.targetUser,
+          timeAgo: a.timeAgo || relativeTime(a.created_at),
+        }));
+        setFeed(list);
+      })
+      .catch(() => setFeed([]))
+      .finally(() => setFeedYukleniyor(false));
+  }, [connectedUser]);
+
+  // Onboarding: ilk ziyaret
+  useEffect(() => {
+    if (!connectedUser && !localStorage.getItem("ss_onboarding_dismissed")) {
+      const t = setTimeout(() => setShowBagla(true), 2000);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [connectedUser]);
 
   // Flaş içerik yükleme — paralel çok-keyword arama ile taze içerik
   useEffect(() => {
@@ -1339,6 +1387,95 @@ export default function Home() {
 
         {/* Rate limit ekranı kaldırıldı — API server artık kendi şekilde çözüm üretiyor */}
 
+        {/* ── NELER OLUP BİTİYOR? ── */}
+        {connectedUser && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 220, delay: 0.35 }}
+            className="w-full max-w-2xl mb-6"
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}>
+                <Bell className="w-4 h-4 text-primary" />
+              </motion.div>
+              <h2 className="font-display font-bold text-sm text-white">Neler olup bitiyor?</h2>
+              <span className="text-[10px] text-white/30 bg-white/5 px-2 py-0.5 rounded-full">{feed.length}</span>
+              <button
+                onClick={() => setShowBagla(true)}
+                className="ml-auto text-[10px] text-white/30 hover:text-primary transition-colors flex items-center gap-1"
+              >
+                <Link2 className="w-3 h-3" /> Hesabını değiştir
+              </button>
+            </div>
+            {feedYukleniyor ? (
+              <div className="flex items-center gap-2 text-xs text-white/30 py-4">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Yükleniyor...
+              </div>
+            ) : feed.length === 0 ? (
+              <div className="text-xs text-white/25 py-3">Takip ettiğin kişilerden henüz aktivite yok.</div>
+            ) : (
+              <div className="space-y-2">
+                {feed.map((a: any, i: number) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.06, type: "spring", stiffness: 300 }}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors cursor-pointer"
+                    onClick={() => {
+                      if (a.projectId) setLocation(`/proje/${a.projectId}`);
+                      else if (a.targetUser) setLocation(`/kullanici/${a.targetUser}`);
+                    }}
+                  >
+                    <img src={a.actorAvatar} alt="" className="w-8 h-8 rounded-full bg-white/10 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white/80 truncate">
+                        <span className="font-semibold text-primary">{a.actor}</span>
+                        {" "}
+                        {a.type === "share" && <>"<span className="text-accent">{a.projectTitle}</span>" projesini paylaştı</>}
+                        {a.type === "follow" && <>artık <span className="text-accent">{a.targetUser}</span> kullanıcısını takip ediyor</>}
+                        {a.type === "love" && <>"<span className="text-accent">{a.projectTitle}</span>" projesini beğendi</>}
+                        {a.type === "favorite" && <>"<span className="text-accent">{a.projectTitle}</span>" projesini favoriledi</>}
+                      </p>
+                      <p className="text-[10px] text-white/25 mt-0.5">{a.timeAgo}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {!connectedUser && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 220, delay: 0.35 }}
+            className="w-full max-w-2xl mb-6"
+          >
+            <div
+              className="flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer hover:bg-white/[0.05] transition-colors"
+              style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}
+              onClick={() => setShowBagla(true)}
+            >
+              <motion.div
+                animate={{ scale: [1, 1.15, 1], rotate: [0, 8, -8, 0] }}
+                transition={{ duration: 3, repeat: Infinity }}
+                className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+              >
+                <UserPlus className="w-4 h-4 text-white" />
+              </motion.div>
+              <div>
+                <p className="text-xs font-semibold text-white">Hesabını bağla</p>
+                <p className="text-[10px] text-white/30">Takip ettiğin kişilerin aktivitelerini gör.</p>
+              </div>
+              <ArrowRight className="w-4 h-4 text-white/20 ml-auto" />
+            </div>
+          </motion.div>
+        )}
+
         {/* ── HATA ── */}
         <AnimatePresence>
           {durum === "hata" && (
@@ -1562,6 +1699,16 @@ export default function Home() {
             onInterest={handleInterest}
             onNearEnd={loadMore}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ── BAĞLA MODAL ── */}
+      <AnimatePresence>
+        {showBagla && (
+          <BaglaModal onClose={() => {
+            setShowBagla(false);
+            localStorage.setItem("ss_onboarding_dismissed", "1");
+          }} />
         )}
       </AnimatePresence>
     </div>

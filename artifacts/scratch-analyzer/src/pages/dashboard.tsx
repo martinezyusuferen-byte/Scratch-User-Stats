@@ -19,12 +19,15 @@ import {
   Box, Hexagon, Circle, Triangle, Aperture, Compass,
   Globe, Package, PieChart, Hash, Percent, Calculator,
   BookOpen, Bookmark, Flag, Navigation, Radar as RadarIcon,
+  UserPlus, UserMinus,
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useGetScratchUser, useGetScratchUserProjects } from "@workspace/api-client-react";
+
+const BASE = import.meta.env.VITE_API_URL || "";
 
 const container = {
   hidden: { opacity: 0 },
@@ -89,14 +92,34 @@ function AracKarti({ baslik, deger, alt, ikon: Ikon, renk, aciklama, detay }: {
   );
 }
 
+function getFollowing(): string[] {
+  try { return JSON.parse(localStorage.getItem("ss_following") || "[]"); } catch { return []; }
+}
+function setFollowing(list: string[]) {
+  localStorage.setItem("ss_following", JSON.stringify(list));
+}
+function getConnectedUser(): string | null {
+  return localStorage.getItem("ss_connected_user");
+}
+
 export default function Dashboard() {
   const { username } = useParams<{ username: string }>();
   const [, setLocation] = useLocation();
   const [aramaInput, setAramaInput] = useState("");
   const raporRef = useRef<HTMLDivElement>(null);
+  const [takipEdiyor, setTakipEdiyor] = useState(() => getFollowing().includes(username || ""));
 
   const { data: analiz, isLoading, error } = useGetScratchUser(username || "");
   const { data: projelerData, isLoading: projelerYukleniyor, error: projelerHata } = useGetScratchUserProjects(username || "", { limit: 9 });
+
+  const toggleTakip = () => {
+    if (!username) return;
+    const list = getFollowing();
+    const now = list.includes(username);
+    const updated = now ? list.filter(u => u !== username) : [...list, username];
+    setFollowing(updated);
+    setTakipEdiyor(!now);
+  };
 
   const handleArama = (e: React.FormEvent) => {
     e.preventDefault();
@@ -335,6 +358,17 @@ export default function Dashboard() {
                   <Calendar className="inline w-3 h-3 mr-1" />
                   Katılım: {new Date(analiz.profile.join_date).toLocaleDateString("tr-TR", { year: "numeric", month: "long" })}
                 </div>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={toggleTakip}
+                  className={`mt-3 w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all border ${
+                    takipEdiyor
+                      ? "bg-white/5 text-white/60 border-white/10 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
+                      : "bg-primary/20 text-primary border-primary/30 hover:bg-primary/30"
+                  }`}
+                >
+                  {takipEdiyor ? <><UserMinus className="w-3.5 h-3.5" /> Takibi Bırak</> : <><UserPlus className="w-3.5 h-3.5" /> Takip Et</>}
+                </motion.button>
               </div>
             </GlassCard>
 
