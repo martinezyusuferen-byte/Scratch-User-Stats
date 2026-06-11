@@ -1062,7 +1062,7 @@ router.get("/user/:username/following", async (req, res) => {
   }
 });
 
-// Takip ettiği kişilerin son projelerini çek → feed
+// Takip ettiği kişilerin son projelerini + favorilerini çek → feed
 router.get("/feed/:username", async (req, res) => {
   const { username } = req.params;
   const cacheKey = `feed:${username}`;
@@ -1073,42 +1073,130 @@ router.get("/feed/:username", async (req, res) => {
     const following = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=12&offset=0`);
     if (!Array.isArray(following)) { res.json({ activities: [] }); return; }
 
-    // Her kişinin son projelerini çek
     const activities: any[] = [];
-    const creators = following.slice(0, 6); // ilk 6 kişi
+    const creators = following.slice(0, 8);
+
     for (const creator of creators) {
+      const actorAvatar = creator.profile?.images?.["60x60"] ||
+        `https://cdn2.scratch.mit.edu/get_image/user/${creator.id}_60x60.png`;
       try {
-        const projeler = await fetchScratch(`${SCRATCH_API}/users/${creator.username}/projects?limit=3&offset=0`);
+        // Paylaşılan projeler — gerçek tarih: history.shared
+        const projeler = await fetchScratch(`${SCRATCH_API}/users/${creator.username}/projects?limit=4&offset=0`);
         if (Array.isArray(projeler)) {
-          projeler.slice(0, 2).forEach((p: any, i: number) => {
+          projeler.slice(0, 3).forEach((p: any) => {
+            const sharedAt = p.history?.shared || p.history?.modified || new Date().toISOString();
             activities.push({
               type: "share",
               actor: creator.username,
-              actor_avatar: creator.profile?.images?.["60x60"] || `https://cdn2.scratch.mit.edu/get_image/user/${creator.id}_60x60.png`,
+              actor_avatar: actorAvatar,
               project: {
                 id: p.id,
                 title: p.title || "Başlıksız",
                 thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
                 loves: p.stats?.loves || 0,
                 views: p.stats?.views || 0,
+                favorites: p.stats?.favorites || 0,
                 creator: creator.username,
               },
-              // Simulated recency — spread across "recent" timeframe
-              created_at: new Date(Date.now() - i * 3600000 * 2).toISOString(),
+              created_at: sharedAt,
+            });
+          });
+        }
+      } catch (_) { /* skip */ }
+
+      try {
+        // Favorilenen projeler — gerçek API endpoint
+        const favs = await fetchScratch(`${SCRATCH_API}/users/${creator.username}/favorites?limit=3&offset=0`);
+        if (Array.isArray(favs)) {
+          favs.slice(0, 2).forEach((p: any) => {
+            const favAt = p.history?.modified || p.history?.shared || new Date().toISOString();
+            activities.push({
+              type: "favorite",
+              actor: creator.username,
+              actor_avatar: actorAvatar,
+              project: {
+                id: p.id,
+                title: p.title || "Başlıksız",
+                thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+                loves: p.stats?.loves || 0,
+                views: p.stats?.views || 0,
+                creator: p.author?.username || "?",
+              },
+              created_at: favAt,
             });
           });
         }
       } catch (_) { /* skip */ }
     }
 
-    // Sort by newest first
     activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-    const result = { activities: activities.slice(0, 12) };
+    const result = { activities: activities.slice(0, 20) };
     cacheSet(cacheKey, result);
     res.json(result);
   } catch (_) {
     res.json({ activities: [] });
+  }
+});
+
+// Tek kullanıcının detaylı aktivitesi (popup için)
+router.get("/user/:username/activity", async (req, res) => {
+  const { username } = req.params;
+  const cacheKey = `activity:${username}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  try {
+    const [profile, projects, favorites] = await Promise.allSettled([
+      fetchScratch(`${SCRATCH_API}/users/${username}`),
+      fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=8&offset=0`),
+      fetchScratch(`${SCRATCH_API}/users/${username}/favorites?limit=6&offset=0`),
+    ]);
+
+    const profileData = profile.status === "fulfilled" ? profile.value : null;
+    const projectsData = projects.status === "fulfilled" && Array.isArray(projects.value) ? projects.value : [];
+    const favoritesData = favorites.status === "fulfilled" && Array.isArray(favorites.value) ? favorites.value : [];
+
+    // Son 7 günde aktif mi? (en yeni projenin tarihine bak)
+    const newestProjectDate = projectsData.length > 0
+      ? new Date(projectsData[0].history?.shared || projectsData[0].history?.modified || 0).getTime()
+      : 0;
+    const activeLastWeek = newestProjectDate > Date.now() - 7 * 24 * 3600000;
+    const activeLastMonth = newestProjectDate > Date.now() - 30 * 24 * 3600000;
+
+    const result = {
+      username,
+      avatar: profileData?.profile?.images?.["90x90"] ||
+        `https://cdn2.scratch.mit.edu/get_image/user/${profileData?.id || 0}_90x90.png`,
+      bio: profileData?.profile?.bio || "",
+      country: profileData?.profile?.country || "",
+      followers: profileData?.followers || 0,
+      following: profileData?.following || 0,
+      joinDate: profileData?.history?.joined || null,
+      activeLastWeek,
+      activeLastMonth,
+      projects: projectsData.slice(0, 6).map((p: any) => ({
+        id: p.id,
+        title: p.title || "Başlıksız",
+        thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+        loves: p.stats?.loves || 0,
+        views: p.stats?.views || 0,
+        favorites: p.stats?.favorites || 0,
+        sharedAt: p.history?.shared || p.history?.modified || null,
+      })),
+      favorites: favoritesData.slice(0, 6).map((p: any) => ({
+        id: p.id,
+        title: p.title || "Başlıksız",
+        thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
+        loves: p.stats?.loves || 0,
+        views: p.stats?.views || 0,
+        creator: p.author?.username || "?",
+      })),
+    };
+
+    cacheSet(cacheKey, result);
+    res.json(result);
+  } catch (_) {
+    res.status(500).json({ error: "activity_error" });
   }
 });
 

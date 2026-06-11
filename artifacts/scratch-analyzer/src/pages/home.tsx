@@ -565,6 +565,225 @@ function relativeTime(iso: string): string {
   return `${g} gün önce`;
 }
 
+// ─── Arkadaş Detay Popup ─────────────────────────────────────────────────────
+function ArkadasFotoAvatar({ src, alt, size = 8 }: { src: string; alt: string; size?: number }) {
+  const [err, setErr] = useState(false);
+  return (
+    <div
+      className={`shrink-0 rounded-full bg-white/10 overflow-hidden border-2 border-white/10`}
+      style={{ width: `${size * 4}px`, height: `${size * 4}px` }}
+    >
+      {!err ? (
+        <img src={src} alt={alt} className="w-full h-full object-cover" onError={() => setErr(true)} />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-white/30 font-bold text-sm">
+          {alt[0]?.toUpperCase()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ArkadaşDetayPopup({ username, onClose }: { username: string; onClose: () => void }) {
+  const [, setLocation] = useLocation();
+  const [data, setData] = useState<any>(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [aktifTab, setAktifTab] = useState<"projeler" | "favoriler">("projeler");
+
+  useEffect(() => {
+    setYukleniyor(true);
+    fetch(`${BASE}/api/scratch/user/${encodeURIComponent(username)}/activity`)
+      .then(r => r.json())
+      .then(d => setData(d))
+      .catch(() => setData(null))
+      .finally(() => setYukleniyor(false));
+  }, [username]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      style={{ background: "rgba(0,0,0,0.88)", backdropFilter: "blur(8px)" }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 60, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.96 }}
+        transition={{ type: "spring", stiffness: 320, damping: 28 }}
+        className="w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl overflow-hidden flex flex-col"
+        style={{
+          background: "rgba(14,14,24,0.98)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          maxHeight: "85vh",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-white/15" />
+        </div>
+
+        {yukleniyor ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 0.9, ease: "linear" }}
+              className="w-10 h-10 rounded-full border-2 border-white/10 border-t-primary"
+            />
+            <p className="text-sm text-white/40">@{username} yükleniyor...</p>
+          </div>
+        ) : !data ? (
+          <div className="py-12 text-center text-white/30 text-sm">Yüklenemedi.</div>
+        ) : (
+          <div className="overflow-y-auto flex-1">
+            {/* Header — profil */}
+            <div className="relative px-5 pt-5 pb-4">
+              <div
+                className="absolute inset-x-0 top-0 h-24 opacity-40"
+                style={{ background: "linear-gradient(180deg, hsl(var(--primary)/0.3), transparent)" }}
+              />
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/8 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/15 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="relative flex items-center gap-4">
+                <ArkadasFotoAvatar src={data.avatar} alt={username} size={14} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-display font-bold text-lg text-white">{username}</h2>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                      data.activeLastWeek
+                        ? "bg-green-500/15 text-green-400 border-green-500/30"
+                        : data.activeLastMonth
+                        ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
+                        : "bg-white/5 text-white/30 border-white/10"
+                    }`}>
+                      {data.activeLastWeek ? "🟢 Bu hafta aktif" : data.activeLastMonth ? "🟡 Bu ay aktif" : "⚫ Pasif"}
+                    </span>
+                  </div>
+                  {data.bio && <p className="text-xs text-white/40 mt-0.5 line-clamp-2">{data.bio}</p>}
+                  <div className="flex items-center gap-3 mt-2 text-[11px] text-white/40">
+                    <span><span className="font-bold text-white/70">{(data.followers || 0).toLocaleString("tr-TR")}</span> takipçi</span>
+                    <span><span className="font-bold text-white/70">{(data.following || 0).toLocaleString("tr-TR")}</span> takip</span>
+                    {data.country && <span>📍 {data.country}</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => { onClose(); setLocation(`/kullanici/${username}`); }}
+                  className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5"
+                  style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+                >
+                  <Users className="w-3.5 h-3.5" /> Tam Analiz
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => window.open(`https://scratch.mit.edu/users/${username}`, "_blank")}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-white/60 border border-white/10 hover:bg-white/5 transition-colors flex items-center gap-1.5"
+                >
+                  <Globe className="w-3.5 h-3.5" /> Scratch
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-white/[0.07] px-5">
+              {(["projeler", "favoriler"] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setAktifTab(tab)}
+                  className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${
+                    aktifTab === tab ? "text-white" : "text-white/35 hover:text-white/60"
+                  }`}
+                >
+                  {tab === "projeler" ? "📤 Paylaşılan Projeler" : "❤️ Favorileri"}
+                  {aktifTab === tab && (
+                    <motion.div
+                      layoutId="tab-indicator"
+                      className="absolute bottom-0 inset-x-4 h-0.5 rounded-full"
+                      style={{ background: "linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)))" }}
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* İçerik */}
+            <div className="px-5 py-4">
+              {aktifTab === "projeler" && (
+                <div className="space-y-3">
+                  {(data.projects || []).length === 0 ? (
+                    <p className="text-xs text-white/25 text-center py-4">Proje bulunamadı.</p>
+                  ) : (data.projects || []).map((p: any, i: number) => (
+                    <motion.div
+                      key={p.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="flex gap-3 items-center cursor-pointer group"
+                      onClick={() => { onClose(); setLocation(`/proje/${p.id}`); }}
+                    >
+                      <div className="w-16 h-12 rounded-lg overflow-hidden bg-white/5 shrink-0">
+                        <img src={p.thumbnail_url} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white/90 line-clamp-1 group-hover:text-primary transition-colors">{p.title}</p>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-white/30">
+                          <span className="flex items-center gap-0.5"><Heart className="w-2.5 h-2.5 text-pink-400/70" />{(p.loves || 0).toLocaleString("tr-TR")}</span>
+                          <span className="flex items-center gap-0.5"><Eye className="w-2.5 h-2.5 text-blue-400/70" />{(p.views || 0).toLocaleString("tr-TR")}</span>
+                          {p.sharedAt && <span>{relativeTime(p.sharedAt)}</span>}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+
+              {aktifTab === "favoriler" && (
+                <div className="space-y-3">
+                  {(data.favorites || []).length === 0 ? (
+                    <p className="text-xs text-white/25 text-center py-4">Favori bulunamadı.</p>
+                  ) : (data.favorites || []).map((p: any, i: number) => (
+                    <motion.div
+                      key={p.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="flex gap-3 items-center cursor-pointer group"
+                      onClick={() => { onClose(); setLocation(`/proje/${p.id}`); }}
+                    >
+                      <div className="w-16 h-12 rounded-lg overflow-hidden bg-white/5 shrink-0">
+                        <img src={p.thumbnail_url} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white/90 line-clamp-1 group-hover:text-accent transition-colors">{p.title}</p>
+                        <p className="text-[10px] text-white/30 mt-0.5">@{p.creator}</p>
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-white/30">
+                          <span className="flex items-center gap-0.5"><Heart className="w-2.5 h-2.5 text-pink-400/70" />{(p.loves || 0).toLocaleString("tr-TR")}</span>
+                          <span className="flex items-center gap-0.5"><Eye className="w-2.5 h-2.5 text-blue-400/70" />{(p.views || 0).toLocaleString("tr-TR")}</span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function BaglaModal({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0); // 0=intro, 1=input, 2=loading, 3=success
   const [username, setUsername] = useState("");
@@ -1084,6 +1303,7 @@ export default function Home() {
   const [feed, setFeed] = useState<any[]>([]);
   const [feedYukleniyor, setFeedYukleniyor] = useState(false);
   const [showBagla, setShowBagla] = useState(false);
+  const [arkadasPopup, setArkadasPopup] = useState<string | null>(null);
 
   // Flaş state
   const [flashProjeler, setFlashProjeler] = useState<any[]>([]);
@@ -1415,31 +1635,59 @@ export default function Home() {
             ) : feed.length === 0 ? (
               <div className="text-xs text-white/25 py-3">Takip ettiğin kişilerden henüz aktivite yok.</div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {feed.map((a: any, i: number) => (
                   <motion.div
                     key={i}
                     initial={{ opacity: 0, x: -12 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.06, type: "spring", stiffness: 300 }}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.07] transition-colors cursor-pointer"
-                    onClick={() => {
-                      if (a.projectId) setLocation(`/proje/${a.projectId}`);
-                      else if (a.targetUser) setLocation(`/kullanici/${a.targetUser}`);
-                    }}
+                    transition={{ delay: i * 0.05, type: "spring", stiffness: 300 }}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.07] hover:border-primary/20 transition-all cursor-pointer group"
+                    onClick={() => setArkadasPopup(a.actor)}
                   >
-                    <img src={a.actorAvatar} alt="" className="w-8 h-8 rounded-full bg-white/10 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-white/80 truncate">
-                        <span className="font-semibold text-primary">{a.actor}</span>
-                        {" "}
-                        {a.type === "share" && <>"<span className="text-accent">{a.projectTitle}</span>" projesini paylaştı</>}
-                        {a.type === "follow" && <>artık <span className="text-accent">{a.targetUser}</span> kullanıcısını takip ediyor</>}
-                        {a.type === "love" && <>"<span className="text-accent">{a.projectTitle}</span>" projesini beğendi</>}
-                        {a.type === "favorite" && <>"<span className="text-accent">{a.projectTitle}</span>" projesini favoriledi</>}
-                      </p>
-                      <p className="text-[10px] text-white/25 mt-0.5">{a.timeAgo}</p>
+                    {/* Küçük yuvarlak profil fotoğrafı */}
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 border border-white/10">
+                        <img
+                          src={a.actorAvatar}
+                          alt={a.actor}
+                          className="w-full h-full object-cover"
+                          onError={e => { (e.target as HTMLImageElement).src = `https://cdn2.scratch.mit.edu/get_image/user/0_60x60.png`; }}
+                        />
+                      </div>
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-background text-[6px] flex items-center justify-center ${
+                        a.type === "share" ? "bg-primary" : a.type === "favorite" ? "bg-pink-500" : "bg-blue-500"
+                      }`}>
+                        {a.type === "share" ? "📤" : a.type === "favorite" ? "❤️" : "👥"}
+                      </div>
                     </div>
+
+                    {/* Metin */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-white/70 truncate leading-snug">
+                        <span className="font-semibold text-white/90 group-hover:text-primary transition-colors">{a.actor}</span>
+                        {" "}
+                        {a.type === "share" && <span className="text-white/50">paylaştı: <span className="text-white/70">"{a.projectTitle}"</span></span>}
+                        {a.type === "follow" && <span className="text-white/50">takip etti: <span className="text-white/70">{a.targetUser}</span></span>}
+                        {a.type === "love" && <span className="text-white/50">beğendi: <span className="text-white/70">"{a.projectTitle}"</span></span>}
+                        {a.type === "favorite" && <span className="text-white/50">favoriledi: <span className="text-white/70">"{a.projectTitle}"</span></span>}
+                      </p>
+                      <p className="text-[9px] text-white/20 mt-0.5">{a.timeAgo}</p>
+                    </div>
+
+                    {/* Küçük proje thumbnail */}
+                    {a.projectId && a.type !== "follow" && (
+                      <div
+                        className="w-10 h-7 rounded-md overflow-hidden bg-white/5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+                        onClick={e => { e.stopPropagation(); setLocation(`/proje/${a.projectId}`); }}
+                      >
+                        <img
+                          src={`https://cdn2.scratch.mit.edu/get_image/project/${a.projectId}_480x360.png`}
+                          alt=""
+                          className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                        />
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </div>
@@ -1638,7 +1886,7 @@ export default function Home() {
                   const isPersonalized = flashMod === "personal" && (interests_[proje.creator] || 0) > 2;
                   return (
                     <FlasKart
-                      key={proje.id}
+                      key={`${proje.id}_${i}`}
                       proje={proje}
                       index={i}
                       isPersonalized={isPersonalized}
@@ -1709,6 +1957,16 @@ export default function Home() {
             setShowBagla(false);
             localStorage.setItem("ss_onboarding_dismissed", "1");
           }} />
+        )}
+      </AnimatePresence>
+
+      {/* ── ARKADAŞ DETAY POPUP ── */}
+      <AnimatePresence>
+        {arkadasPopup && (
+          <ArkadaşDetayPopup
+            username={arkadasPopup}
+            onClose={() => setArkadasPopup(null)}
+          />
         )}
       </AnimatePresence>
     </div>
