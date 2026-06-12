@@ -1066,8 +1066,11 @@ router.get("/user/:username/following", async (req, res) => {
 router.get("/feed/:username", async (req, res) => {
   const { username } = req.params;
   const cacheKey = `feed:${username}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) { res.json(cached); return; }
+  const nocache = req.query.nocache === "1";
+  if (!nocache) {
+    const cached = cacheGet(cacheKey);
+    if (cached) { res.json(cached); return; }
+  }
 
   try {
     const following = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40&offset=0`);

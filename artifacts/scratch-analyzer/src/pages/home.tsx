@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue } from "framer-motion";
+import BildirimAyarModal, { getNotifSettings, type NotifSettings } from "@/components/BildirimAyarModal";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Search, BarChart2, Target, TrendingUp, Users, Zap, Star,
@@ -1304,6 +1305,10 @@ export default function Home() {
   const [feedYukleniyor, setFeedYukleniyor] = useState(false);
   const [showBagla, setShowBagla] = useState(false);
   const [arkadasPopup, setArkadasPopup] = useState<string | null>(null);
+  const [showBildirimAyar, setShowBildirimAyar] = useState(false);
+  const [notifSettings, setNotifSettings] = useState<NotifSettings | null>(() => getNotifSettings());
+  const lastFeedKeysRef = useRef<Set<string>>(new Set());
+  const feedPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Flaş state
   const [flashProjeler, setFlashProjeler] = useState<any[]>([]);
@@ -1321,26 +1326,74 @@ export default function Home() {
     setLearnedCats(getTopCategories(1));
   }, []);
 
-  // Feed yukleme
+  // Feed item key — dedup için
+  const feedKey = (a: any) => `${a.actor}_${a.type}_${a.project?.id || a.targetUser || ""}`;
+
+  // Feed normalizasyon
+  const normalizeFeed = (activities: any[]) =>
+    activities.map((a: any) => ({
+      ...a,
+      actorAvatar: a.actor_avatar || a.actorAvatar,
+      projectTitle: a.project?.title || a.projectTitle,
+      projectId: a.project?.id || a.projectId,
+      targetUser: a.targetUser,
+      timeAgo: a.timeAgo || relativeTime(a.created_at),
+    }));
+
+  // Browser bildirimi gönder
+  const sendNotification = useCallback((a: any, settings: NotifSettings) => {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if (!settings.enabled) return;
+    if (settings.excluded.includes(a.actor)) return;
+    const typeVerb = a.type === "share" ? "paylaştı" : a.type === "love" ? "beğendi" : "favoriledi";
+    const body = a.project?.title ? `"${a.project.title}" projesini ${typeVerb}` : `${typeVerb}`;
+    new Notification(`${a.actor}`, { body, icon: a.actorAvatar || "https://cdn2.scratch.mit.edu/get_image/user/0_60x60.png", tag: feedKey(a) });
+  }, []);
+
+  // Feed yukleme (ilk yükleme)
   useEffect(() => {
     if (!connectedUser) return;
     setFeedYukleniyor(true);
     fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}`)
       .then(r => r.json())
       .then(d => {
-        const list = (d.activities || []).map((a: any) => ({
-          ...a,
-          actorAvatar: a.actor_avatar || a.actorAvatar,
-          projectTitle: a.project?.title || a.projectTitle,
-          projectId: a.project?.id || a.projectId,
-          targetUser: a.targetUser,
-          timeAgo: a.timeAgo || relativeTime(a.created_at),
-        }));
+        const list = normalizeFeed(d.activities || []);
+        lastFeedKeysRef.current = new Set(list.map(feedKey));
         setFeed(list);
       })
       .catch(() => setFeed([]))
       .finally(() => setFeedYukleniyor(false));
   }, [connectedUser]);
+
+  // Real-time polling — 30 saniyede bir
+  useEffect(() => {
+    if (!connectedUser) return;
+    if (feedPollRef.current) clearInterval(feedPollRef.current);
+
+    feedPollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}?nocache=1`);
+        const d = await r.json();
+        const fresh = normalizeFeed(d.activities || []);
+        const newItems = fresh.filter(a => !lastFeedKeysRef.current.has(feedKey(a)));
+        if (newItems.length > 0) {
+          lastFeedKeysRef.current = new Set(fresh.map(feedKey));
+          setFeed(prev => {
+            // Unique actor bazlı — yeni kişileri başa ekle
+            const existingActors = new Set(prev.map((x: any) => x.actor));
+            const brand = newItems.filter(a => !existingActors.has(a.actor));
+            const merged = [...brand, ...prev];
+            return merged;
+          });
+          // Bildirim gönder
+          const settings = getNotifSettings();
+          if (settings) newItems.forEach(a => sendNotification(a, settings));
+        }
+      } catch { /* sessiz hata */ }
+    }, 30_000);
+
+    return () => { if (feedPollRef.current) clearInterval(feedPollRef.current); };
+  }, [connectedUser, sendNotification]);
 
   // Onboarding: ilk ziyaret
   useEffect(() => {
@@ -1616,11 +1669,27 @@ export default function Home() {
             className="w-full max-w-2xl mb-6"
           >
             <div className="flex items-center gap-2 mb-3">
-              <motion.div animate={{ scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}>
-                <Bell className="w-4 h-4 text-primary" />
-              </motion.div>
               <h2 className="font-display font-bold text-sm text-white">Neler olup bitiyor?</h2>
               <span className="text-[10px] text-white/30 bg-white/5 px-2 py-0.5 rounded-full">{feed.length}</span>
+              {/* Zil butonu — bildirim ayarları */}
+              <motion.button
+                whileTap={{ scale: 0.88 }}
+                whileHover={{ scale: 1.12 }}
+                onClick={() => setShowBildirimAyar(true)}
+                className="relative w-7 h-7 rounded-full flex items-center justify-center transition-colors"
+                style={{ background: notifSettings?.enabled ? "hsl(var(--primary)/0.18)" : "rgba(255,255,255,0.06)" }}
+                title="Masaüstü bildirimlerini ayarla"
+              >
+                <motion.div
+                  animate={notifSettings?.enabled ? { rotate: [0, -12, 12, -6, 6, 0] } : { scale: [1, 1.15, 1] }}
+                  transition={{ duration: 2.4, repeat: Infinity, repeatDelay: 4 }}
+                >
+                  <Bell className={`w-3.5 h-3.5 ${notifSettings?.enabled ? "text-primary" : "text-white/35"}`} />
+                </motion.div>
+                {notifSettings?.enabled && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary border border-background" />
+                )}
+              </motion.button>
               <button
                 onClick={() => setShowBagla(true)}
                 className="ml-auto text-[10px] text-white/30 hover:text-primary transition-colors flex items-center gap-1"
@@ -1635,7 +1704,7 @@ export default function Home() {
             ) : feed.length === 0 ? (
               <div className="text-xs text-white/25 py-3">Takip ettiğin kişilerden henüz aktivite yok.</div>
             ) : (() => {
-              // Unique kullanıcılar — en son aktiviteden eskiye
+              // Unique kullanıcılar — en son aktiviteden eskiye (feed zaten sıralı gelir)
               const seen = new Set<string>();
               const uniqueUsers = feed.filter((a: any) => {
                 if (seen.has(a.actor)) return false;
@@ -1643,15 +1712,18 @@ export default function Home() {
                 return true;
               });
               return (
-                <div>
-                  {/* Yatay avatarlar */}
-                  <div className="flex gap-3 overflow-x-auto pb-3 mb-1" style={{ scrollbarWidth: "none" }}>
-                    {uniqueUsers.map((a: any, i: number) => (
+                /* Yatay avatarlar — AnimatePresence ile yeni gelenler başa kayar */
+                <div className="flex gap-3 overflow-x-auto pb-3" style={{ scrollbarWidth: "none" }}>
+                  <AnimatePresence initial={false}>
+                    {uniqueUsers.map((a: any) => (
                       <motion.button
                         key={a.actor}
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: i * 0.05, type: "spring", stiffness: 350, damping: 22 }}
+                        layout
+                        layoutId={`feed-avatar-${a.actor}`}
+                        initial={{ opacity: 0, scale: 0.5, x: -24 }}
+                        animate={{ opacity: 1, scale: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.6 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 26 }}
                         className="flex flex-col items-center gap-1.5 shrink-0 group"
                         onClick={() => setArkadasPopup(a.actor)}
                       >
@@ -1664,10 +1736,10 @@ export default function Home() {
                               onError={e => { (e.target as HTMLImageElement).src = `https://cdn2.scratch.mit.edu/get_image/user/0_60x60.png`; }}
                             />
                           </div>
-                          <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border-2 border-background flex items-center justify-center text-[8px] ${
-                            a.type === "share" ? "bg-primary" : "bg-pink-500"
+                          <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[9px] ${
+                            a.type === "share" ? "bg-primary/90" : a.type === "favorite" ? "bg-yellow-500/90" : "bg-pink-500/90"
                           }`}>
-                            {a.type === "share" ? "📤" : "❤️"}
+                            {a.type === "share" ? "📤" : a.type === "favorite" ? "⭐" : "❤️"}
                           </div>
                         </div>
                         <span className="text-[10px] text-white/50 group-hover:text-primary transition-colors max-w-[56px] truncate text-center leading-none">
@@ -1675,59 +1747,7 @@ export default function Home() {
                         </span>
                       </motion.button>
                     ))}
-                  </div>
-
-                  {/* Detaylı aktivite listesi */}
-                  <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin" }}>
-                    {feed.map((a: any, i: number) => (
-                      <motion.div
-                        key={`${a.actor}_${a.type}_${a.project?.id}_${i}`}
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.04, type: "spring", stiffness: 300 }}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:bg-white/[0.07] hover:border-primary/20 transition-all cursor-pointer group"
-                        onClick={() => {
-                          if (a.project?.id) { setLocation(`/proje/${a.project.id}`); }
-                          else { setArkadasPopup(a.actor); }
-                        }}
-                      >
-                        <div className="relative shrink-0">
-                          <div className="w-9 h-9 rounded-full overflow-hidden bg-white/10 border border-white/10">
-                            <img
-                              src={a.actorAvatar}
-                              alt={a.actor}
-                              className="w-full h-full object-cover"
-                              onError={e => { (e.target as HTMLImageElement).src = `https://cdn2.scratch.mit.edu/get_image/user/0_60x60.png`; }}
-                            />
-                          </div>
-                          <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-background flex items-center justify-center text-[6px] ${
-                            a.type === "share" ? "bg-primary" : "bg-pink-500"
-                          }`}>
-                            {a.type === "share" ? "📤" : "❤️"}
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] text-white/70 truncate leading-snug">
-                            <span className="font-semibold text-white/90 group-hover:text-primary transition-colors">{a.actor}</span>
-                            {" "}
-                            {a.type === "share" && <span className="text-white/50">paylaştı: <span className="text-white/70">"{a.project?.title}"</span></span>}
-                            {a.type === "love" && <span className="text-white/50">beğendi: <span className="text-white/70">"{a.project?.title}"</span></span>}
-                            {a.type === "favorite" && <span className="text-white/50">favoriledi: <span className="text-white/70">"{a.project?.title}"</span></span>}
-                          </p>
-                          <p className="text-[9px] text-white/20 mt-0.5">{a.timeAgo}</p>
-                        </div>
-                        {a.project?.id && (
-                          <div className="w-10 h-7 rounded-md overflow-hidden bg-white/5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <img
-                              src={a.project.thumbnail_url}
-                              alt=""
-                              className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
-                            />
-                          </div>
-                        )}
-                      </motion.div>
-                    ))}
-                  </div>
+                  </AnimatePresence>
                 </div>
               );
             })()}
@@ -2005,6 +2025,20 @@ export default function Home() {
           <ArkadaşDetayPopup
             username={arkadasPopup}
             onClose={() => setArkadasPopup(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── BİLDİRİM AYAR MODAL ── */}
+      <AnimatePresence>
+        {showBildirimAyar && connectedUser && (
+          <BildirimAyarModal
+            connectedUser={connectedUser}
+            onClose={() => setShowBildirimAyar(false)}
+            onSave={(s) => {
+              setNotifSettings(s);
+              setShowBildirimAyar(false);
+            }}
           />
         )}
       </AnimatePresence>
