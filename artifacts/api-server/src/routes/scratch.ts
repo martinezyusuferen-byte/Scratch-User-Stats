@@ -1146,15 +1146,23 @@ router.get("/user/:username/activity", async (req, res) => {
   if (cached) { res.json(cached); return; }
 
   try {
-    const [profile, projects, favorites] = await Promise.allSettled([
+    const [profile, projects, favorites, follRes, folwRes] = await Promise.allSettled([
       fetchScratch(`${SCRATCH_API}/users/${username}`),
       fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=8&offset=0`),
       fetchScratch(`${SCRATCH_API}/users/${username}/favorites?limit=6&offset=0`),
+      fetchScratch(`${SCRATCH_API}/users/${username}/followers?limit=40&offset=0`),
+      fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40&offset=0`),
     ]);
 
     const profileData = profile.status === "fulfilled" ? profile.value : null;
     const projectsData = projects.status === "fulfilled" && Array.isArray(projects.value) ? projects.value : [];
     const favoritesData = favorites.status === "fulfilled" && Array.isArray(favorites.value) ? favorites.value : [];
+
+    // Takipçi/takip — ilk sayfa sayısı (40+ ise gerçekte daha fazla)
+    const followers = follRes.status === "fulfilled" && Array.isArray(follRes.value) ? follRes.value.length : 0;
+    const following = folwRes.status === "fulfilled" && Array.isArray(folwRes.value) ? folwRes.value.length : 0;
+    const followersPlus = followers === 40;
+    const followingPlus = following === 40;
 
     // Son 7 günde aktif mi? (en yeni projenin tarihine bak)
     const newestProjectDate = projectsData.length > 0
@@ -1169,8 +1177,10 @@ router.get("/user/:username/activity", async (req, res) => {
         `https://cdn2.scratch.mit.edu/get_image/user/${profileData?.id || 0}_90x90.png`,
       bio: profileData?.profile?.bio || "",
       country: profileData?.profile?.country || "",
-      followers: profileData?.followers || 0,
-      following: profileData?.following || 0,
+      followers,
+      following,
+      followersPlus,
+      followingPlus,
       joinDate: profileData?.history?.joined || null,
       activeLastWeek,
       activeLastMonth,
