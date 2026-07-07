@@ -1,0 +1,32 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "VPgAo65vXQo4gAv5b_plN"
+uri = "file://artifacts/scratch-analyzer/public/sounds/glass_chime.mp3"
+type = "audio"
+title = "glass_chime"
+
+[[outputs]]
+id = "TGM6bgJLh-piutsMez2Vy"
+uri = "file://artifacts/scratch-analyzer/public/sounds/warm_bell.mp3"
+type = "audio"
+title = "warm_bell"
+
+[[outputs]]
+id = "LFes_I0g1PAXcvvW-YaCD"
+uri = "file://artifacts/scratch-analyzer/public/sounds/neon_pop.mp3"
+type = "audio"
+title = "neon_pop"
+
+[[outputs]]
+id = "fqtFby6m8wdEVFirBgw8E"
+uri = "file://artifacts/scratch-analyzer/public/sounds/soft_ping.mp3"
+type = "audio"
+title = "soft_ping"
+
+[[outputs]]
+id = "kp7kiOjzavBtezN-r11gg"
+uri = "file://artifacts/scratch-analyzer/public/sounds/pixel_beep.mp3"
+type = "audio"
+title = "pixel_beep"

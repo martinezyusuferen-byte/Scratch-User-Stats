@@ -1340,11 +1340,17 @@ export default function Home() {
       timeAgo: a.timeAgo || relativeTime(a.created_at),
     }));
 
-  // Browser bildirimi gönder
+  // Browser bildirimi gönder + ses çal (anlık)
   const sendNotification = useCallback((a: any, settings: NotifSettings) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     if (!settings.enabled) return;
     if (settings.excluded.includes(a.actor)) return;
+    // Önce ses çal (her zaman, anlık)
+    const soundFile = settings.sound || "glass_chime";
+    const audio = new Audio(`${BASE}sounds/${soundFile}.mp3`);
+    audio.volume = 0.5;
+    audio.play().catch(() => {});
+    // Sonra Notification API
     const typeVerb = a.type === "share" ? "paylaştı" : a.type === "love" ? "beğendi" : "favoriledi";
     const body = a.project?.title ? `"${a.project.title}" projesini ${typeVerb}` : `${typeVerb}`;
     new Notification(`${a.actor}`, { body, icon: a.actorAvatar || "https://cdn2.scratch.mit.edu/get_image/user/0_60x60.png", tag: feedKey(a) });
