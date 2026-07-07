@@ -1365,32 +1365,31 @@ export default function Home() {
       .finally(() => setFeedYukleniyor(false));
   }, [connectedUser]);
 
-  // Real-time polling — 30 saniyede bir
+  // Gerçek zamanlı polling — 2 dakikada bir (rate limit koruması)
   useEffect(() => {
     if (!connectedUser) return;
     if (feedPollRef.current) clearInterval(feedPollRef.current);
 
     feedPollRef.current = setInterval(async () => {
       try {
-        const r = await fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}?nocache=1`);
+        // nocache YOK — cache'den dön, API'yi zorlama
+        const r = await fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}`);
         const d = await r.json();
         const fresh = normalizeFeed(d.activities || []);
         const newItems = fresh.filter(a => !lastFeedKeysRef.current.has(feedKey(a)));
         if (newItems.length > 0) {
           lastFeedKeysRef.current = new Set(fresh.map(feedKey));
           setFeed(prev => {
-            // Unique actor bazlı — yeni kişileri başa ekle
             const existingActors = new Set(prev.map((x: any) => x.actor));
             const brand = newItems.filter(a => !existingActors.has(a.actor));
             const merged = [...brand, ...prev];
             return merged;
           });
-          // Bildirim gönder
           const settings = getNotifSettings();
           if (settings) newItems.forEach(a => sendNotification(a, settings));
         }
       } catch { /* sessiz hata */ }
-    }, 30_000);
+    }, 120_000); // 2 dakika — Scratch API rate limit dostu
 
     return () => { if (feedPollRef.current) clearInterval(feedPollRef.current); };
   }, [connectedUser, sendNotification]);

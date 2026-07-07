@@ -56,28 +56,44 @@ async function doFetch(url: string, attempt = 1): Promise<any> {
   return data;
 }
 
-async function fetchScratch(url: string, { maxRetries = 3, delayMs = 1200 } = {}): Promise<any> {
+// ── Self-Healing: Retry + Exponential Backoff + Stale Fallback ──
+async function fetchScratch(url: string, { maxRetries = 3, baseDelay = 300 } = {}): Promise<any> {
   const cached = cacheGet(url);
   if (cached) return cached;
   let lastErr: any;
   for (let i = 0; i < maxRetries; i++) {
     try {
       if (i > 0) {
-        await new Promise(r => setTimeout(r, delayMs + i * 600));
+        const delay = baseDelay * Math.pow(2, i - 1) + Math.random() * 200;
+        await new Promise(r => setTimeout(r, Math.min(delay, 2000)));
       }
       const data = await doFetch(url);
       cacheSet(url, data);
       return data;
     } catch (err: any) {
       lastErr = err;
-      // 404 = dönümü yok
-      if (err.status === 404) throw err;
+      // 404 ve 429 = dönümü yok (rate limit retry kasıntı çıkarır)
+      if (err.status === 404 || err.status === 429 || err.status === 502 || err.status === 503) break;
     }
   }
-  // Sonuç olmadı, stale cache varsa döndür
+  // Sonuç olmadı, stale cache varsa döndür (self-healing)
   const stale = cacheGet(url, true);
   if (stale) return stale;
   throw lastErr;
+}
+
+// ── Batch arşiv: Promise.allSettled + max concurrency ──
+async function fetchScratchBatch(urls: string[], concurrency = 3): Promise<any[]> {
+  const results: any[] = [];
+  for (let i = 0; i < urls.length; i += concurrency) {
+    const batch = urls.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(batch.map(u => fetchScratch(u, { maxRetries: 2, baseDelay: 200 }).catch(() => [])));
+    results.push(...settled.map(r => r.status === "fulfilled" ? r.value : []));
+    if (i + concurrency < urls.length) {
+      await new Promise(r => setTimeout(r, 200 + Math.random() * 100));
+    }
+  }
+  return results;
 }
 
 function hesaplaRutbe(skor: number) {
@@ -1066,88 +1082,68 @@ router.get("/user/:username/following", async (req, res) => {
 router.get("/feed/:username", async (req, res) => {
   const { username } = req.params;
   const cacheKey = `feed:${username}`;
-  const nocache = req.query.nocache === "1";
-  if (!nocache) {
-    const cached = cacheGet(cacheKey);
-    if (cached) { res.json(cached); return; }
-  }
+
+  // İlk: cache'den dön (rate limit koruması için zorunlu)
+  const cached = cacheGet(cacheKey);
+  if (cached) { res.json(cached); return; }
+
+  // Hızlı timeout — 8 saniyede bitmezse boş döndür (taze veri yok)
+  const FAST_TIMEOUT = 8_000;
+  let responded = false;
+  const fastTimer = setTimeout(() => {
+    if (responded) return;
+    responded = true;
+    res.json({ activities: [] });
+  }, FAST_TIMEOUT);
 
   try {
     const following = await fetchScratch(`${SCRATCH_API}/users/${username}/following?limit=40&offset=0`);
-    if (!Array.isArray(following)) { res.json({ activities: [] }); return; }
+    if (!Array.isArray(following)) {
+      clearTimeout(fastTimer);
+      if (!responded) { responded = true; res.json({ activities: [] }); }
+      return;
+    }
 
+    // Sadece 8 kişi — Scratch API rate limit dayanmaz, azaltmaya mecburuz
+    const creators = following.slice(0, 8);
     const activities: any[] = [];
-    const creators = following.slice(0, 20);
 
     for (const creator of creators) {
       const actorAvatar = creator.profile?.images?.["60x60"] ||
         `https://cdn2.scratch.mit.edu/get_image/user/${creator.id}_60x60.png`;
       try {
         const [projeler, loves, favs] = await Promise.allSettled([
-          fetchScratch(`${SCRATCH_API}/users/${creator.username}/projects?limit=6&offset=0`).catch(() => []),
-          fetchScratch(`${SCRATCH_API}/users/${creator.username}/loves?limit=5&offset=0`).catch(() => []),
-          fetchScratch(`${SCRATCH_API}/users/${creator.username}/favorites?limit=5&offset=0`).catch(() => []),
+          fetchScratch(`${SCRATCH_API}/users/${creator.username}/projects?limit=4&offset=0`, { maxRetries: 2, baseDelay: 800 }).catch(() => []),
+          fetchScratch(`${SCRATCH_API}/users/${creator.username}/loves?limit=3&offset=0`, { maxRetries: 2, baseDelay: 800 }).catch(() => []),
+          fetchScratch(`${SCRATCH_API}/users/${creator.username}/favorites?limit=3&offset=0`, { maxRetries: 2, baseDelay: 800 }).catch(() => []),
         ]);
 
         const projelerData = projeler.status === "fulfilled" && Array.isArray(projeler.value) ? projeler.value : [];
         const lovesData = loves.status === "fulfilled" && Array.isArray(loves.value) ? loves.value : [];
         const favsData = favs.status === "fulfilled" && Array.isArray(favs.value) ? favs.value : [];
 
-        // Paylaşılan projeler
         projelerData.slice(0, 4).forEach((p: any) => {
-          const sharedAt = p.history?.shared || p.history?.modified || new Date().toISOString();
-          activities.push({
-            type: "share",
-            actor: creator.username,
-            actor_avatar: actorAvatar,
-            project: {
-              id: p.id,
-              title: p.title || "Başlıksız",
+          activities.push({ type: "share", actor: creator.username, actor_avatar: actorAvatar,
+            project: { id: p.id, title: p.title || "Başlıksız",
               thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
-              loves: p.stats?.loves || 0,
-              views: p.stats?.views || 0,
-              favorites: p.stats?.favorites || 0,
-              creator: creator.username,
-            },
-            created_at: sharedAt,
+              loves: p.stats?.loves || 0, views: p.stats?.views || 0, favorites: p.stats?.favorites || 0, creator: creator.username },
+            created_at: p.history?.shared || p.history?.modified || new Date().toISOString(),
           });
         });
-
-        // Beğenilen projeler
         lovesData.slice(0, 3).forEach((p: any) => {
-          const lovedAt = p.history?.modified || p.history?.shared || new Date().toISOString();
-          activities.push({
-            type: "love",
-            actor: creator.username,
-            actor_avatar: actorAvatar,
-            project: {
-              id: p.id,
-              title: p.title || "Başlıksız",
+          activities.push({ type: "love", actor: creator.username, actor_avatar: actorAvatar,
+            project: { id: p.id, title: p.title || "Başlıksız",
               thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
-              loves: p.stats?.loves || 0,
-              views: p.stats?.views || 0,
-              creator: p.author?.username || "?",
-            },
-            created_at: lovedAt,
+              loves: p.stats?.loves || 0, views: p.stats?.views || 0, creator: p.author?.username || "?" },
+            created_at: p.history?.modified || p.history?.shared || new Date().toISOString(),
           });
         });
-
-        // Favorilenen projeler
         favsData.slice(0, 3).forEach((p: any) => {
-          const favAt = p.history?.modified || p.history?.shared || new Date().toISOString();
-          activities.push({
-            type: "favorite",
-            actor: creator.username,
-            actor_avatar: actorAvatar,
-            project: {
-              id: p.id,
-              title: p.title || "Başlıksız",
+          activities.push({ type: "favorite", actor: creator.username, actor_avatar: actorAvatar,
+            project: { id: p.id, title: p.title || "Başlıksız",
               thumbnail_url: p.image || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
-              loves: p.stats?.loves || 0,
-              views: p.stats?.views || 0,
-              creator: p.author?.username || "?",
-            },
-            created_at: favAt,
+              loves: p.stats?.loves || 0, views: p.stats?.views || 0, creator: p.author?.username || "?" },
+            created_at: p.history?.modified || p.history?.shared || new Date().toISOString(),
           });
         });
       } catch (_) { /* skip */ }
@@ -1156,9 +1152,11 @@ router.get("/feed/:username", async (req, res) => {
     activities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     const result = { activities: activities.slice(0, 30) };
     cacheSet(cacheKey, result);
-    res.json(result);
+    clearTimeout(fastTimer);
+    if (!responded) { responded = true; res.json(result); }
   } catch (_) {
-    res.json({ activities: [] });
+    clearTimeout(fastTimer);
+    if (!responded) { responded = true; res.json({ activities: [] }); }
   }
 });
 
