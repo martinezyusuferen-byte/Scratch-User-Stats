@@ -1082,10 +1082,13 @@ router.get("/user/:username/following", async (req, res) => {
 router.get("/feed/:username", async (req, res) => {
   const { username } = req.params;
   const cacheKey = `feed:${username}`;
+  const force = req.query.force === "1";
 
-  // İlk: cache'den dön (rate limit koruması için zorunlu)
-  const cached = cacheGet(cacheKey);
-  if (cached) { res.json(cached); return; }
+  // Force=1 → cache'i bypass et, taze veri çek
+  if (!force) {
+    const cached = cacheGet(cacheKey);
+    if (cached) { res.json(cached); return; }
+  }
 
   // Hızlı timeout — 8 saniyede bitmezse boş döndür (taze veri yok)
   const FAST_TIMEOUT = 8_000;

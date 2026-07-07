@@ -1340,11 +1340,19 @@ export default function Home() {
       timeAgo: a.timeAgo || relativeTime(a.created_at),
     }));
 
+  // Bildirim türüne göre geçer mi?
+  const matchesType = (a: any, type: NotifSettings["type"]) => {
+    if (type === "all") return true;
+    if (type === "active" || type === "new_only") return a.type === "share";
+    return true;
+  };
+
   // Browser bildirimi gönder + ses çal (anlık)
   const sendNotification = useCallback((a: any, settings: NotifSettings) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     if (!settings.enabled) return;
     if (settings.excluded.includes(a.actor)) return;
+    if (!matchesType(a, settings.type)) return;
     // Önce ses çal (her zaman, anlık)
     const soundFile = settings.sound || "glass_chime";
     const audio = new Audio(`${BASE}sounds/${soundFile}.mp3`);
@@ -1371,15 +1379,22 @@ export default function Home() {
       .finally(() => setFeedYukleniyor(false));
   }, [connectedUser]);
 
-  // Gerçek zamanlı polling — 2 dakikada bir (rate limit koruması)
+  // Gerçek zamanlı polling — 60s, force=1 ile taze veri
   useEffect(() => {
     if (!connectedUser) return;
     if (feedPollRef.current) clearInterval(feedPollRef.current);
 
+    // Default ayarlar: ayar yapılmadıysa bile bildirim gelsin
+    const getSettingsOrDefault = (): NotifSettings => {
+      const saved = getNotifSettings();
+      if (saved) return saved;
+      return { enabled: true, type: "all", excluded: [], sound: "glass_chime" };
+    };
+
     feedPollRef.current = setInterval(async () => {
       try {
-        // nocache YOK — cache'den dön, API'yi zorlama
-        const r = await fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}`);
+        // force=1 → cache bypass, taze veri çek
+        const r = await fetch(`${BASE}/api/scratch/feed/${encodeURIComponent(connectedUser)}?force=1`);
         const d = await r.json();
         const fresh = normalizeFeed(d.activities || []);
         const newItems = fresh.filter(a => !lastFeedKeysRef.current.has(feedKey(a)));
@@ -1391,11 +1406,11 @@ export default function Home() {
             const merged = [...brand, ...prev];
             return merged;
           });
-          const settings = getNotifSettings();
-          if (settings) newItems.forEach(a => sendNotification(a, settings));
+          const settings = getSettingsOrDefault();
+          if (settings.enabled) newItems.forEach(a => sendNotification(a, settings));
         }
       } catch { /* sessiz hata */ }
-    }, 120_000); // 2 dakika — Scratch API rate limit dostu
+    }, 60_000); // 60 saniye — taze veri takibi
 
     return () => { if (feedPollRef.current) clearInterval(feedPollRef.current); };
   }, [connectedUser, sendNotification]);
