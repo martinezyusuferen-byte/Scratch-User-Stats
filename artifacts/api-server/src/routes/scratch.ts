@@ -1321,30 +1321,28 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-// GET /api/scratch/messages — oturum gerektiren gelen kutusu
+// GET /api/scratch/messages — sadece X-Token ile çalışır
 router.get("/messages", async (req, res) => {
-  const sessionId = req.headers["x-scratch-session"] as string;
   const xToken = req.headers["x-scratch-token"] as string;
   const username = req.headers["x-scratch-user"] as string;
   const offset = Number(req.query.offset || 0);
   const limit = Math.min(40, Number(req.query.limit || 20));
 
-  if (!sessionId || !username) {
-    res.status(401).json({ error: "unauthorized", message: "Oturum gerekli." });
+  if (!xToken || !username) {
+    res.status(401).json({ error: "unauthorized", message: "Token gerekli." });
     return;
   }
 
   try {
     const authHeaders: Record<string, string> = {
-      "Cookie": `scratchsessionsid=${sessionId}`,
+      "X-Token": xToken,
       "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0",
       "Accept": "application/json",
       "X-Requested-With": "XMLHttpRequest",
     };
-    if (xToken) authHeaders["X-Token"] = xToken;
 
     const r = await fetch(
-      `https://api.scratch.mit.edu/proxy/users/${encodeURIComponent(username)}/activity/?limit=${limit}&offset=${offset}`,
+      `https://api.scratch.mit.edu/users/${encodeURIComponent(username)}/messages?limit=${limit}&offset=${offset}`,
       { headers: authHeaders, signal: AbortSignal.timeout(10000) }
     );
 
@@ -1404,29 +1402,19 @@ router.get("/messages", async (req, res) => {
 
 // GET /api/scratch/messages/count — okunmamış mesaj sayısı
 router.get("/messages/count", async (req, res) => {
-  const sessionId = req.headers["x-scratch-session"] as string;
   const xToken = req.headers["x-scratch-token"] as string;
   const username = req.headers["x-scratch-user"] as string;
 
-  if (!sessionId || !username) {
-    res.status(401).json({ count: 0 });
-    return;
-  }
+  if (!xToken || !username) { res.json({ count: 0 }); return; }
 
   try {
-    const authHeaders: Record<string, string> = {
-      "Cookie": `scratchsessionsid=${sessionId}`,
-      "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0",
-      "Accept": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    };
-    if (xToken) authHeaders["X-Token"] = xToken;
-
     const r = await fetch(
-      `https://api.scratch.mit.edu/proxy/users/${encodeURIComponent(username)}/activity/count/`,
-      { headers: authHeaders, signal: AbortSignal.timeout(6000) }
+      `https://api.scratch.mit.edu/proxy/users/${encodeURIComponent(username)}/messages/count`,
+      {
+        headers: { "X-Token": xToken, "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0", "Accept": "application/json" },
+        signal: AbortSignal.timeout(6000),
+      }
     );
-
     if (!r.ok) { res.json({ count: 0 }); return; }
     const d = await r.json().catch(() => ({ count: 0 }));
     res.json({ count: d.count || d.message_count || 0 });
