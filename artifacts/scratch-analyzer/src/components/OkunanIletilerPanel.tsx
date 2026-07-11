@@ -102,10 +102,11 @@ function TokenGirisFormu({ onLogin }: { onLogin: (s: ScratchSession) => void }) 
           <div className="rounded-xl border border-white/[0.07] bg-white/[0.03] p-3 flex flex-col gap-2.5">
             <p className="text-[10px] text-white/50 font-semibold uppercase tracking-wider">Nasıl yapılır?</p>
             {[
-              { n: "1", text: "Tarayıcında Scratch'e giriş yap" },
-              { n: "2", text: <>Yeni sekmede aç: <span className="text-primary font-mono text-[10px]">scratch.mit.edu/session/</span></> },
-              { n: "3", text: <>Açılan JSON'da <span className="text-primary font-mono">"token"</span> değerini kopyala</> },
-              { n: "4", text: "Aşağıya kullanıcı adını ve token'ı yapıştır" },
+              { n: "1", text: "Tarayıcında scratch.mit.edu'ya giriş yap" },
+              { n: "2", text: "Herhangi bir Scratch sayfasında F12 → Console sekmesini aç" },
+              { n: "3", text: <span>Konsola şunu yapıştır ve Enter'a bas:<br /><span className="text-primary font-mono text-[9px] break-all select-all">{"fetch('/session/').then(r=>r.json()).then(d=>console.log('TOKEN:',d.user?.token))"}</span></span> },
+              { n: "4", text: <>Konsolda çıkan <span className="text-primary font-mono">TOKEN: ...</span> değerini kopyala</> },
+              { n: "5", text: '"Token\'ım Hazır" butonuna bas ve yapıştır' },
             ].map(s => (
               <div key={s.n} className="flex items-start gap-2">
                 <span className="w-4 h-4 rounded-full bg-primary/20 text-primary text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
@@ -114,17 +115,11 @@ function TokenGirisFormu({ onLogin }: { onLogin: (s: ScratchSession) => void }) 
             ))}
           </div>
 
-          <div className="flex gap-2">
-            <a href="https://scratch.mit.edu/session/" target="_blank" rel="noopener noreferrer"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[11px] font-semibold border border-white/10 bg-white/[0.04] text-white/60 hover:bg-white/[0.08] hover:text-white transition-all">
-              <ExternalLink className="w-3 h-3" /> scratch.mit.edu/session/
-            </a>
-            <motion.button whileTap={{ scale: 0.96 }} onClick={() => setStep("paste")} type="button"
-              className="flex-1 py-2.5 rounded-xl text-[11px] font-bold text-white"
-              style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}>
-              Token'ım Hazır →
-            </motion.button>
-          </div>
+          <motion.button whileTap={{ scale: 0.96 }} onClick={() => setStep("paste")} type="button"
+            className="w-full py-2.5 rounded-xl text-[11px] font-bold text-white"
+            style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)))" }}>
+            Token&apos;ım Hazır →
+          </motion.button>
         </motion.div>
       )}
 
