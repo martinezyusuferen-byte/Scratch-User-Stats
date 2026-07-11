@@ -103,9 +103,9 @@ function TokenGirisFormu({ onLogin }: { onLogin: (s: ScratchSession) => void }) 
             <p className="text-[10px] text-white/50 font-semibold uppercase tracking-wider">Nasıl yapılır?</p>
             {[
               { n: "1", text: "Tarayıcında scratch.mit.edu'ya giriş yap" },
-              { n: "2", text: "Herhangi bir Scratch sayfasında F12 → Console sekmesini aç" },
-              { n: "3", text: <span>Konsola şunu yapıştır ve Enter'a bas:<br /><span className="text-primary font-mono text-[9px] break-all select-all">{"fetch('/session/').then(r=>r.json()).then(d=>console.log('TOKEN:',d.user?.token))"}</span></span> },
-              { n: "4", text: <>Konsolda çıkan <span className="text-primary font-mono">TOKEN: ...</span> değerini kopyala</> },
+              { n: "2", text: "F12 → Network sekmesini aç, sonra sayfayı yenile (F5)" },
+              { n: "3", text: <>Filtre kutusuna <span className="text-primary font-mono">session</span> yaz — listede <span className="text-primary font-mono">session/</span> isteğini bul ve tıkla</> },
+              { n: "4", text: <>Sağda <span className="text-primary font-mono">Response</span> sekmesine geç → JSON içinde <span className="text-primary font-mono">"token"</span> değerini kopyala</> },
               { n: "5", text: '"Token\'ım Hazır" butonuna bas ve yapıştır' },
             ].map(s => (
               <div key={s.n} className="flex items-start gap-2">
