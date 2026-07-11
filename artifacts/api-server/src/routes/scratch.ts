@@ -1235,4 +1235,229 @@ router.get("/user/:username/activity", async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════
+// OKUNAN İLETİLER — Scratch Kimlik Doğrulama + Mesajlar
+// ══════════════════════════════════════════════════════
+
+// POST /api/scratch/auth/login
+router.post("/auth/login", async (req, res) => {
+  const { username, password } = req.body as { username?: string; password?: string };
+  if (!username || !password) {
+    res.status(400).json({ error: "missing_fields", message: "Kullanıcı adı ve şifre gerekli." });
+    return;
+  }
+
+  try {
+    // 1) CSRF token al
+    const csrfRes = await fetch("https://scratch.mit.edu/csrf_token/", {
+      headers: { "User-Agent": "ScratchAnalyzer/1.0", "Accept": "*/*" },
+      signal: AbortSignal.timeout(8000),
+    });
+    const setCookieHdr = csrfRes.headers.get("set-cookie") || "";
+    const csrfMatch = setCookieHdr.match(/scratchcsrftoken=([^;]+)/);
+    const csrfToken = csrfMatch ? csrfMatch[1] : "a";
+    const cookieForLogin = `scratchcsrftoken=${csrfToken}`;
+
+    // 2) Login
+    const loginRes = await fetch("https://scratch.mit.edu/accounts/login/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken,
+        "Cookie": cookieForLogin,
+        "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0",
+        "Accept": "application/json",
+        "Referer": "https://scratch.mit.edu/",
+        "Origin": "https://scratch.mit.edu",
+      },
+      body: JSON.stringify({ username, password }),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!loginRes.ok) {
+      res.status(401).json({ error: "login_failed", message: "Giriş başarısız. Kullanıcı adı veya şifre hatalı." });
+      return;
+    }
+
+    const loginData = await loginRes.json().catch(() => null);
+    // success: 1 bekliyoruz
+    if (!loginData || loginData.success !== 1) {
+      const msg = loginData?.msg || "Giriş başarısız.";
+      res.status(401).json({ error: "login_failed", message: msg });
+      return;
+    }
+
+    // Oturum cookie'sini al
+    const loginCookies = loginRes.headers.get("set-cookie") || "";
+    const sessionMatch = loginCookies.match(/scratchsessionsid=([^;]+)/);
+    const sessionId = sessionMatch ? sessionMatch[1] : "";
+    if (!sessionId) {
+      res.status(401).json({ error: "no_session", message: "Oturum token alınamadı." });
+      return;
+    }
+
+    // 3) X-Token al
+    const sessionRes = await fetch("https://scratch.mit.edu/session/", {
+      headers: {
+        "Cookie": `scratchsessionsid=${sessionId}; scratchcsrftoken=${csrfToken}`,
+        "X-Requested-With": "XMLHttpRequest",
+        "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0",
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    const sessionData = await sessionRes.json().catch(() => ({}));
+    const xToken = sessionData?.user?.token || "";
+
+    res.json({
+      ok: true,
+      username: sessionData?.user?.username || username,
+      sessionId,
+      xToken,
+      avatar: `https://cdn2.scratch.mit.edu/get_image/user/${sessionData?.user?.id || 0}_60x60.png`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "server_error", message: err.message || "Sunucu hatası." });
+  }
+});
+
+// GET /api/scratch/messages — oturum gerektiren gelen kutusu
+router.get("/messages", async (req, res) => {
+  const sessionId = req.headers["x-scratch-session"] as string;
+  const xToken = req.headers["x-scratch-token"] as string;
+  const username = req.headers["x-scratch-user"] as string;
+  const offset = Number(req.query.offset || 0);
+  const limit = Math.min(40, Number(req.query.limit || 20));
+
+  if (!sessionId || !username) {
+    res.status(401).json({ error: "unauthorized", message: "Oturum gerekli." });
+    return;
+  }
+
+  try {
+    const authHeaders: Record<string, string> = {
+      "Cookie": `scratchsessionsid=${sessionId}`,
+      "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0",
+      "Accept": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    };
+    if (xToken) authHeaders["X-Token"] = xToken;
+
+    const r = await fetch(
+      `https://api.scratch.mit.edu/proxy/users/${encodeURIComponent(username)}/activity/?limit=${limit}&offset=${offset}`,
+      { headers: authHeaders, signal: AbortSignal.timeout(10000) }
+    );
+
+    if (!r.ok) {
+      res.status(r.status).json({ error: "fetch_failed", message: `Scratch API: ${r.status}` });
+      return;
+    }
+
+    const raw = await r.text();
+    // Activity feed XML/JSON — birleştir
+    let messages: any[] = [];
+    try {
+      // JSON dene
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) messages = data;
+      else if (data?.items) messages = data.items;
+      else if (data?.activities) messages = data.activities;
+      else messages = [data];
+    } catch {
+      // XML activity feed → regex parse
+      const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+      let m;
+      while ((m = itemRegex.exec(raw)) !== null) {
+        const block = m[1];
+        const get = (tag: string) => { const t = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`).exec(block); return t ? t[1].trim() : ""; };
+        messages.push({
+          id: get("guid") || get("id"),
+          type: get("type") || "comment",
+          actor: get("actor") || get("username"),
+          actorAvatar: get("actorAvatar") || "",
+          text: get("text") || get("title") || get("description"),
+          projectId: get("projectId"),
+          projectTitle: get("projectTitle"),
+          created_at: get("pubDate") || get("datetime") || new Date().toISOString(),
+        });
+      }
+    }
+
+    // Normalize
+    const normalized = messages.slice(0, limit).map((m: any, i: number) => ({
+      id: m.id || m.comment_id || String(i),
+      type: m.type || "comment",
+      actor: m.actor || m.actor_username || m.username || "?",
+      actorAvatar: m.actorAvatar || m.actor_avatar || `https://cdn2.scratch.mit.edu/get_image/user/0_60x60.png`,
+      text: m.text || m.content || m.comment_fragment || m.title || "",
+      projectId: m.projectId || m.project_id,
+      projectTitle: m.projectTitle || m.project_title || "",
+      created_at: m.created_at || m.datetime_created || new Date().toISOString(),
+      read: false,
+    }));
+
+    res.json({ messages: normalized, total: normalized.length });
+  } catch (err: any) {
+    res.status(500).json({ error: "server_error", message: err.message });
+  }
+});
+
+// GET /api/scratch/messages/count — okunmamış mesaj sayısı
+router.get("/messages/count", async (req, res) => {
+  const sessionId = req.headers["x-scratch-session"] as string;
+  const xToken = req.headers["x-scratch-token"] as string;
+  const username = req.headers["x-scratch-user"] as string;
+
+  if (!sessionId || !username) {
+    res.status(401).json({ count: 0 });
+    return;
+  }
+
+  try {
+    const authHeaders: Record<string, string> = {
+      "Cookie": `scratchsessionsid=${sessionId}`,
+      "User-Agent": "Mozilla/5.0 ScratchAnalyzer/1.0",
+      "Accept": "application/json",
+      "X-Requested-With": "XMLHttpRequest",
+    };
+    if (xToken) authHeaders["X-Token"] = xToken;
+
+    const r = await fetch(
+      `https://api.scratch.mit.edu/proxy/users/${encodeURIComponent(username)}/activity/count/`,
+      { headers: authHeaders, signal: AbortSignal.timeout(6000) }
+    );
+
+    if (!r.ok) { res.json({ count: 0 }); return; }
+    const d = await r.json().catch(() => ({ count: 0 }));
+    res.json({ count: d.count || d.message_count || 0 });
+  } catch {
+    res.json({ count: 0 });
+  }
+});
+
+// GET /api/scratch/online/:username — çevrimiçi mi?
+router.get("/online/:username", async (req, res) => {
+  const { username } = req.params;
+  try {
+    // Son aktivite zamanını projects + profile üzerinden tahmin et
+    const [profile, projects] = await Promise.all([
+      fetchScratch(`${SCRATCH_API}/users/${username}`).catch(() => null),
+      fetchScratch(`${SCRATCH_API}/users/${username}/projects?limit=1`).catch(() => []),
+    ]);
+
+    const lastActive = profile?.history?.modified || profile?.history?.joined || null;
+    const lastProject = Array.isArray(projects) && projects[0] ? (projects[0].history?.modified || null) : null;
+    const latestTs = [lastActive, lastProject].filter(Boolean).map((s: any) => new Date(s).getTime());
+    const maxTs = latestTs.length > 0 ? Math.max(...latestTs) : 0;
+    const ageMin = maxTs > 0 ? (Date.now() - maxTs) / 60000 : 999;
+
+    // 10 dakika içinde aktifse "online"
+    const online = ageMin < 10;
+    const activeRecently = ageMin < 60;
+    res.json({ online, activeRecently, lastSeenMinutesAgo: Math.round(ageMin) });
+  } catch {
+    res.json({ online: false, activeRecently: false, lastSeenMinutesAgo: -1 });
+  }
+});
+
 export default router;

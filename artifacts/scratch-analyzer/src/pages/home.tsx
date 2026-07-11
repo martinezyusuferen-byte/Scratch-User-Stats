@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence, useMotionValue } from "framer-motion";
 import BildirimAyarModal, { getNotifSettings, type NotifSettings } from "@/components/BildirimAyarModal";
+import OkunanIletilerPanel from "@/components/OkunanIletilerPanel";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Search, BarChart2, Target, TrendingUp, Users, Zap, Star,
@@ -2014,6 +2015,11 @@ export default function Home() {
             </motion.div>
           ))}
         </motion.div>
+      </div>
+
+      {/* ── OKUNAN İLETİLER ── */}
+      <div className="w-full px-4 sm:px-0 sm:max-w-md sm:mx-auto pb-2">
+        <OkunanIletilerPanel />
       </div>
 
       {/* ── FLAŞ OYNATICI ── */}
