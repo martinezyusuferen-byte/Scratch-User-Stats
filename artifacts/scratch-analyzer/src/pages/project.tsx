@@ -26,10 +26,13 @@ async function fetchProje(id: string) {
 function RollingStatValue({ value }: { value: number }) {
   const prefersReducedMotion = useReducedMotion();
   const currentValue = Math.max(0, Math.trunc(value || 0));
-  const previousValueRef = useRef(Math.max(0, currentValue - 1));
+  const initialValueRef = useRef(Math.max(0, currentValue - 1));
+  const previousValueRef = useRef(initialValueRef.current);
+  const [hasStarted, setHasStarted] = useState(false);
   const previousValue = previousValueRef.current;
 
   useEffect(() => {
+    setHasStarted(true);
     previousValueRef.current = currentValue;
   }, [currentValue]);
 
@@ -50,19 +53,24 @@ function RollingStatValue({ value }: { value: number }) {
         const placeValue = 10 ** digitsAfter;
         const previousDigit = Math.floor(previousValue / placeValue) % 10;
         const currentDigit = Math.floor(currentValue / placeValue) % 10;
-        const previousPosition = 10 - previousDigit;
+        const initialDigit = Math.floor(initialValueRef.current / placeValue) % 10;
+        const initialPosition = 10 - initialDigit;
         const rolledOver = currentValue > previousValue && previousDigit === 9 && currentDigit === 0;
         const currentPosition = rolledOver ? 0 : 10 - currentDigit;
+        const position = hasStarted || prefersReducedMotion ? currentPosition : initialPosition;
 
         return (
           <span
             key={`digit-${digitsAfter}`}
             className="inline-flex h-[1em] w-[0.62em] overflow-hidden align-[-0.12em]"
           >
-            <motion.span
-              initial={{ y: `-${(previousPosition * 100) / reelDigits.length}%` }}
-              animate={{ y: `-${(currentPosition * 100) / reelDigits.length}%` }}
-              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: Math.min(digitsAfter, 4) * 0.025 }}
+            <span
+              style={{
+                transform: `translateY(-${position}em)`,
+                transition: prefersReducedMotion
+                  ? "none"
+                  : `transform 550ms cubic-bezier(0.22, 1, 0.36, 1) ${Math.min(digitsAfter, 4) * 25}ms`,
+              }}
               className="inline-flex flex-col leading-none"
             >
               {reelDigits.map((digit, reelIndex) => (
@@ -70,7 +78,7 @@ function RollingStatValue({ value }: { value: number }) {
                   {digit}
                 </span>
               ))}
-            </motion.span>
+            </span>
           </span>
         );
       })}
