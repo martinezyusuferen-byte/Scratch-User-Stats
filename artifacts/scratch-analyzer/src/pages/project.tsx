@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Heart, Star, Eye, GitBranch, ArrowLeft, Search,
   ExternalLink, User, Calendar, MessageCircle, Zap,
@@ -23,14 +23,84 @@ async function fetchProje(id: string) {
   return r.json();
 }
 
-function StatPill({ ikon: Ikon, deger, renk, etiket }: { ikon: any; deger: string | number; renk: string; etiket: string }) {
+function RollingStatValue({ value }: { value: number }) {
+  const prefersReducedMotion = useReducedMotion();
+  const currentValue = Math.max(0, Math.trunc(value || 0));
+  const previousValueRef = useRef(Math.max(0, currentValue - 1));
+  const previousValue = previousValueRef.current;
+
+  useEffect(() => {
+    previousValueRef.current = currentValue;
+  }, [currentValue]);
+
+  const formattedValue = currentValue.toLocaleString("tr-TR");
+
+  if (prefersReducedMotion) return <span aria-hidden="true">{formattedValue}</span>;
+
+  const reelDigits = [0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+
+  return (
+    <span className="inline-flex items-center tabular-nums" aria-hidden="true">
+      {Array.from(formattedValue).map((character, index) => {
+        if (!/\d/.test(character)) {
+          return <span key={`separator-${index}`}>{character}</span>;
+        }
+
+        const digitsAfter = Array.from(formattedValue.slice(index + 1)).filter((next) => /\d/.test(next)).length;
+        const placeValue = 10 ** digitsAfter;
+        const previousDigit = Math.floor(previousValue / placeValue) % 10;
+        const currentDigit = Math.floor(currentValue / placeValue) % 10;
+        const previousPosition = 10 - previousDigit;
+        const rolledOver = currentValue > previousValue && previousDigit === 9 && currentDigit === 0;
+        const currentPosition = rolledOver ? 0 : 10 - currentDigit;
+
+        return (
+          <span
+            key={`digit-${digitsAfter}`}
+            className="inline-flex h-[1em] w-[0.62em] overflow-hidden align-[-0.12em]"
+          >
+            <motion.span
+              initial={{ y: `-${(previousPosition * 100) / reelDigits.length}%` }}
+              animate={{ y: `-${(currentPosition * 100) / reelDigits.length}%` }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: Math.min(digitsAfter, 4) * 0.025 }}
+              className="inline-flex flex-col leading-none"
+            >
+              {reelDigits.map((digit, reelIndex) => (
+                <span key={reelIndex} className="flex h-[1em] shrink-0 items-center justify-center">
+                  {digit}
+                </span>
+              ))}
+            </motion.span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+function StatPill({ ikon: Ikon, deger, renk, etiket, animated = false }: {
+  ikon: any;
+  deger: string | number;
+  renk: string;
+  etiket: string;
+  animated?: boolean;
+}) {
+  const formattedValue = typeof deger === "number" ? deger.toLocaleString("tr-TR") : deger;
+
   return (
     <div className="flex flex-col items-center gap-1 group">
       <div className={cn("flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-all",
         "bg-white/[0.06] border border-white/10 hover:border-white/20 hover:bg-white/[0.1] backdrop-blur-md")}
         style={{ color: renk }}>
         <Ikon className="w-3.5 h-3.5" />
-        <span>{typeof deger === "number" ? deger.toLocaleString("tr-TR") : deger}</span>
+        {animated && typeof deger === "number" ? (
+          <>
+            <span className="sr-only">{formattedValue}</span>
+            <RollingStatValue value={deger} />
+          </>
+        ) : (
+          <span>{formattedValue}</span>
+        )}
       </div>
       <span className="text-[10px] text-white/40 group-hover:text-white/60 transition-colors">{etiket}</span>
     </div>
@@ -344,10 +414,10 @@ export default function ProjeDetay() {
 
               {/* İstatistikler */}
               <div className="mt-4 flex flex-wrap gap-3 items-end">
-                <StatPill ikon={Eye} deger={proje.views} renk="#60a5fa" etiket="Görüntüleme" />
-                <StatPill ikon={Heart} deger={proje.loves} renk="#f43f5e" etiket="Beğeni" />
-                <StatPill ikon={Star} deger={proje.favorites} renk="#fbbf24" etiket="Favori" />
-                <StatPill ikon={GitBranch} deger={proje.remixes} renk="#34d399" etiket="Remix" />
+                <StatPill ikon={Eye} deger={proje.views} renk="#60a5fa" etiket="Görüntüleme" animated />
+                <StatPill ikon={Heart} deger={proje.loves} renk="#f43f5e" etiket="Beğeni" animated />
+                <StatPill ikon={Star} deger={proje.favorites} renk="#fbbf24" etiket="Favori" animated />
+                <StatPill ikon={GitBranch} deger={proje.remixes} renk="#34d399" etiket="Remix" animated />
                 {proje.comments > 0 && <StatPill ikon={MessageCircle} deger={proje.comments} renk="#a78bfa" etiket="Yorum" />}
                 <div className="flex-1" />
                 <button onClick={handlePaylasim}
