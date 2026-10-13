@@ -5,6 +5,14 @@ const router: IRouter = Router();
 const SCRATCH_API = "https://api.scratch.mit.edu";
 const SCRATCH_CDN = "https://cdn2.scratch.mit.edu";
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function finiteNumberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
 // ── Basit bellek önbelleği (5 dakika TTL) + stale ──
 const cache = new Map<string, { data: any; ts: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 dk
@@ -879,20 +887,33 @@ router.get("/popular", async (req, res) => {
     // Fallback B: proxy/featured
     const featuredRes = await fetch(`${SCRATCH_API}/proxy/featured`, { headers: hdrs, signal: AbortSignal.timeout(6000) });
     if (featuredRes.ok) {
-      const fd = await featuredRes.json().catch(() => ({}));
-      const featured = fd?.community_most_loved_projects || fd?.community_featured_projects || fd?.curator_top_projects || [];
+      const featuredData: unknown = await featuredRes.json().catch(() => ({}));
+      const featuredObject = isJsonObject(featuredData) ? featuredData : {};
+      const featured =
+        featuredObject.community_most_loved_projects ||
+        featuredObject.community_featured_projects ||
+        featuredObject.curator_top_projects ||
+        [];
       if (Array.isArray(featured) && featured.length > 0) {
-        const results = featured.map((p: any) => ({
-          id: p.id,
-          title: p.title || "Başlıksız",
-          thumbnail_url: p.thumbnail_url || `${SCRATCH_CDN}/projects/${p.id}/thumbnail`,
-          loves: p.love_count || 0,
-          views: p.view_count || 0,
-          favorites: p.favorite_count || 0,
-          creator: p.creator || "",
-          creator_avatar: "",
-          share_date: "",
-        }));
+        const results = featured.map((item: unknown) => {
+          const project = isJsonObject(item) ? item : {};
+          const id = finiteNumberOrZero(project.id);
+
+          return {
+            id,
+            title: typeof project.title === "string" && project.title ? project.title : "Başlıksız",
+            thumbnail_url:
+              typeof project.thumbnail_url === "string" && project.thumbnail_url
+                ? project.thumbnail_url
+                : `${SCRATCH_CDN}/projects/${id}/thumbnail`,
+            loves: finiteNumberOrZero(project.love_count),
+            views: finiteNumberOrZero(project.view_count),
+            favorites: finiteNumberOrZero(project.favorite_count),
+            creator: typeof project.creator === "string" ? project.creator : "",
+            creator_avatar: "",
+            share_date: "",
+          };
+        });
         const payload = { results };
         cacheSet(cacheKey, payload);
         res.json(payload);
@@ -1279,10 +1300,11 @@ router.post("/auth/login", async (req, res) => {
       return;
     }
 
-    const loginData = await loginRes.json().catch(() => null);
+    const loginData: unknown = await loginRes.json().catch(() => null);
+    const loginPayload = isJsonObject(loginData) ? loginData : null;
     // success: 1 bekliyoruz
-    if (!loginData || loginData.success !== 1) {
-      const msg = loginData?.msg || "Giriş başarısız.";
+    if (!loginPayload || loginPayload.success !== 1) {
+      const msg = typeof loginPayload?.msg === "string" ? loginPayload.msg : "Giriş başarısız.";
       res.status(401).json({ error: "login_failed", message: msg });
       return;
     }
@@ -1306,15 +1328,20 @@ router.post("/auth/login", async (req, res) => {
       },
       signal: AbortSignal.timeout(8000),
     });
-    const sessionData = await sessionRes.json().catch(() => ({}));
-    const xToken = sessionData?.user?.token || "";
+    const sessionData: unknown = await sessionRes.json().catch(() => ({}));
+    const sessionUser =
+      isJsonObject(sessionData) && isJsonObject(sessionData.user) ? sessionData.user : null;
+    const xToken = typeof sessionUser?.token === "string" ? sessionUser.token : "";
+    const sessionUsername =
+      typeof sessionUser?.username === "string" ? sessionUser.username : username;
+    const sessionUserId = finiteNumberOrZero(sessionUser?.id);
 
     res.json({
       ok: true,
-      username: sessionData?.user?.username || username,
+      username: sessionUsername,
       sessionId,
       xToken,
-      avatar: `https://cdn2.scratch.mit.edu/get_image/user/${sessionData?.user?.id || 0}_60x60.png`,
+      avatar: `https://cdn2.scratch.mit.edu/get_image/user/${sessionUserId}_60x60.png`,
     });
   } catch (err: any) {
     res.status(500).json({ error: "server_error", message: err.message || "Sunucu hatası." });
@@ -1416,8 +1443,10 @@ router.get("/messages/count", async (req, res) => {
       }
     );
     if (!r.ok) { res.json({ count: 0 }); return; }
-    const d = await r.json().catch(() => ({ count: 0 }));
-    res.json({ count: d.count || d.message_count || 0 });
+    const messageCountData: unknown = await r.json().catch(() => ({ count: 0 }));
+    const messageCountObject = isJsonObject(messageCountData) ? messageCountData : {};
+    const count = finiteNumberOrZero(messageCountObject.count) || finiteNumberOrZero(messageCountObject.message_count);
+    res.json({ count });
   } catch {
     res.json({ count: 0 });
   }
